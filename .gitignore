@@ -2,5 +2,6 @@
 *.key
 *.key.pub
 *.sindook
+!internal/box/testdata/*.sindook
 coverage.out
 dist/
