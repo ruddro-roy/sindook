@@ -22,7 +22,7 @@ import (
 	"golang.org/x/crypto/argon2"
 	"golang.org/x/crypto/chacha20poly1305"
 
-	"github.com/ruddro-roy/sindook/internal/xwing"
+	"github.com/ruddro-roy/sindook/xwing"
 )
 
 const (

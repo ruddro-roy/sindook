@@ -11,7 +11,7 @@ import (
 
 	"golang.org/x/crypto/chacha20poly1305"
 
-	"github.com/ruddro-roy/sindook/internal/xwing"
+	"github.com/ruddro-roy/sindook/xwing"
 )
 
 // Small parameters keep the Argon2id tests fast; validity is still enforced.

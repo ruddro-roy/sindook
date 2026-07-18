@@ -3,6 +3,13 @@
 // ML-KEM, X25519, SHAKE-256, and SHA3-256 all come from the Go standard
 // library; this package contains only the key expansion, the combiner, and
 // the concatenation layout defined by the draft.
+//
+// The implementation is validated against the draft's Appendix C test
+// vectors and cross-tested against independent X-Wing implementations in
+// the interop module of this repository. X-Wing is still an Internet-Draft:
+// until it is published as an RFC, the wire format may change between draft
+// revisions and this package tracks the draft, so treat the API and output
+// as draft-stable only.
 package xwing
 
 import (

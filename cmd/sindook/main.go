@@ -16,11 +16,11 @@ import (
 	"golang.org/x/term"
 
 	"github.com/ruddro-roy/sindook/internal/box"
-	"github.com/ruddro-roy/sindook/internal/xwing"
+	"github.com/ruddro-roy/sindook/xwing"
 )
 
 const (
-	version  = "0.2.0"
+	version  = "0.3.0"
 	skPrefix = "sindooksk1:"
 	pkPrefix = "sindookpk1:"
 	ext      = ".sindook"
