@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -19,7 +20,7 @@ import (
 )
 
 const (
-	version  = "0.1.0"
+	version  = "0.2.0"
 	skPrefix = "sindooksk1:"
 	pkPrefix = "sindookpk1:"
 	ext      = ".sindook"
@@ -29,12 +30,17 @@ const usageText = `sindook: post-quantum file encryption (X25519 + ML-KEM-768)
 
 usage:
   sindook keygen [-o FILE] [-f]
-  sindook seal (-r RECIPIENT | -p) [-o OUT] [-f] [FILE]
+  sindook seal (-r RECIPIENT)... [-p] [-o OUT] [-f] [FILE]
   sindook open (-i IDENTITY | -p) [-o OUT] [-f] [FILE]
+  sindook rewrap (-i IDENTITY | -p) (-r RECIPIENT)... [-new-passphrase] [-deep] [-o OUT] [-f] FILE
   sindook version
 
-FILE defaults to stdin, OUT then defaults to stdout.
-seal writes FILE` + ext + `, open strips the suffix.
+seal accepts -r many times and -p together with -r; every recipient and
+passphrase gets a key slot. rewrap replaces the key slots of a sealed file:
+by default payload bytes are untouched, with -deep the payload is
+re-encrypted under a fresh key (required for true revocation).
+FILE defaults to stdin, OUT then defaults to stdout; rewrap defaults to
+rewriting FILE in place.
 RECIPIENT is a path to a key file or a literal ` + pkPrefix + ` string.
 `
 
@@ -51,6 +57,8 @@ func main() {
 		err = cmdSeal(os.Args[2:])
 	case "open":
 		err = cmdOpen(os.Args[2:])
+	case "rewrap":
+		err = cmdRewrap(os.Args[2:])
 	case "version":
 		fmt.Println(version)
 	case "help", "-h", "--help":
@@ -63,6 +71,15 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+}
+
+type multiFlag []string
+
+func (m *multiFlag) String() string { return strings.Join(*m, ",") }
+
+func (m *multiFlag) Set(v string) error {
+	*m = append(*m, v)
+	return nil
 }
 
 func cmdKeygen(args []string) error {
@@ -92,40 +109,51 @@ func cmdKeygen(args []string) error {
 	return nil
 }
 
+// buildSealOptions loads every -r recipient and prompts for a passphrase
+// when requested, so credential errors surface before any output is created.
+func buildSealOptions(recipients []string, withPassphrase bool, promptLabel string) (box.SealOptions, error) {
+	opts := box.SealOptions{Argon: box.DefaultArgon2id}
+	for _, r := range recipients {
+		pub, err := loadRecipient(r)
+		if err != nil {
+			return opts, err
+		}
+		opts.Recipients = append(opts.Recipients, pub)
+	}
+	if withPassphrase {
+		pass, err := promptPassphrase(promptLabel, true)
+		if err != nil {
+			return opts, err
+		}
+		opts.Passphrases = [][]byte{pass}
+	}
+	if len(opts.Recipients) == 0 && len(opts.Passphrases) == 0 {
+		return opts, errors.New("sindook: provide at least one -r recipient or -p")
+	}
+	return opts, nil
+}
+
 func cmdSeal(args []string) error {
 	fs := flag.NewFlagSet("seal", flag.ExitOnError)
-	rec := fs.String("r", "", "recipient key file or literal public key")
-	usePass := fs.Bool("p", false, "seal with a passphrase")
+	var recipients multiFlag
+	fs.Var(&recipients, "r", "recipient key file or literal public key, repeatable")
+	usePass := fs.Bool("p", false, "add a passphrase slot")
 	out := fs.String("o", "", "output path, - for stdout")
 	force := fs.Bool("f", false, "overwrite existing output")
 	fs.Parse(args)
 	if fs.NArg() > 1 {
 		return errors.New("sindook: seal takes at most one input file")
 	}
-	if (*rec != "") == *usePass {
-		return errors.New("sindook: choose exactly one of -r or -p")
-	}
 
+	opts, err := buildSealOptions(recipients, *usePass, "passphrase")
+	if err != nil {
+		return err
+	}
 	in, name, err := openInput(fs.Arg(0))
 	if err != nil {
 		return err
 	}
 	defer in.Close()
-
-	var sealFn func(io.Writer) error
-	if *rec != "" {
-		pub, err := loadRecipient(*rec)
-		if err != nil {
-			return err
-		}
-		sealFn = func(w io.Writer) error { return box.SealRecipient(w, in, pub) }
-	} else {
-		pass, err := promptPassphrase(true)
-		if err != nil {
-			return err
-		}
-		sealFn = func(w io.Writer) error { return box.SealPassphrase(w, in, pass, box.DefaultArgon2id) }
-	}
 
 	outPath := *out
 	if outPath == "" {
@@ -135,7 +163,9 @@ func cmdSeal(args []string) error {
 			outPath = name + ext
 		}
 	}
-	return withOutput(outPath, *force, true, sealFn)
+	return withOutput(outPath, *force, true, func(w io.Writer) error {
+		return box.Seal(w, in, opts)
+	})
 }
 
 func cmdOpen(args []string) error {
@@ -148,25 +178,11 @@ func cmdOpen(args []string) error {
 	if fs.NArg() > 1 {
 		return errors.New("sindook: open takes at most one input file")
 	}
-	if *idPath == "" && !*usePass {
-		return errors.New("sindook: provide -i IDENTITY or -p")
-	}
 
-	var id *xwing.PrivateKey
-	if *idPath != "" {
-		var err error
-		if id, err = loadIdentity(*idPath); err != nil {
-			return err
-		}
+	id, pass, err := loadCredentials(*idPath, *usePass, "passphrase")
+	if err != nil {
+		return err
 	}
-	var pass []byte
-	if *usePass {
-		var err error
-		if pass, err = promptPassphrase(false); err != nil {
-			return err
-		}
-	}
-
 	in, name, err := openInput(fs.Arg(0))
 	if err != nil {
 		return err
@@ -187,6 +203,100 @@ func cmdOpen(args []string) error {
 	return withOutput(outPath, *force, false, func(w io.Writer) error {
 		return box.Open(w, in, id, pass)
 	})
+}
+
+func cmdRewrap(args []string) error {
+	fs := flag.NewFlagSet("rewrap", flag.ExitOnError)
+	idPath := fs.String("i", "", "identity file that opens the file today")
+	usePass := fs.Bool("p", false, "open with the current passphrase")
+	var recipients multiFlag
+	fs.Var(&recipients, "r", "new recipient, repeatable")
+	newPass := fs.Bool("new-passphrase", false, "add a new passphrase slot")
+	deep := fs.Bool("deep", false, "re-encrypt the payload under a fresh file key")
+	out := fs.String("o", "", "output path, default rewrites FILE in place")
+	force := fs.Bool("f", false, "overwrite existing output")
+	fs.Parse(args)
+	if fs.NArg() != 1 {
+		return errors.New("sindook: rewrap takes exactly one sealed file")
+	}
+	inPath := fs.Arg(0)
+
+	id, pass, err := loadCredentials(*idPath, *usePass, "current passphrase")
+	if err != nil {
+		return err
+	}
+	opts, err := buildSealOptions(recipients, *newPass, "new passphrase")
+	if err != nil {
+		return err
+	}
+
+	if *out == "" {
+		return rewrapInPlace(inPath, id, pass, opts, *deep)
+	}
+	in, err := os.Open(inPath)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	return withOutput(*out, *force, true, func(w io.Writer) error {
+		return box.Rewrap(w, in, id, pass, opts, *deep)
+	})
+}
+
+// rewrapInPlace writes the rewrapped file next to the original and renames
+// it over the original only after a complete, successful write.
+func rewrapInPlace(path string, id *xwing.PrivateKey, pass []byte, opts box.SealOptions, deep bool) error {
+	in, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	info, err := in.Stat()
+	if err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".sindook-rewrap-*")
+	if err != nil {
+		return err
+	}
+	cleanup := func() {
+		tmp.Close()
+		os.Remove(tmp.Name())
+	}
+	if err := box.Rewrap(tmp, in, id, pass, opts, deep); err != nil {
+		cleanup()
+		return err
+	}
+	if err := tmp.Chmod(info.Mode().Perm()); err != nil {
+		cleanup()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		cleanup()
+		return err
+	}
+	return os.Rename(tmp.Name(), path)
+}
+
+func loadCredentials(idPath string, usePass bool, passLabel string) (*xwing.PrivateKey, []byte, error) {
+	if idPath == "" && !usePass {
+		return nil, nil, errors.New("sindook: provide -i IDENTITY or -p")
+	}
+	var id *xwing.PrivateKey
+	if idPath != "" {
+		var err error
+		if id, err = loadIdentity(idPath); err != nil {
+			return nil, nil, err
+		}
+	}
+	var pass []byte
+	if usePass {
+		var err error
+		if pass, err = promptPassphrase(passLabel, false); err != nil {
+			return nil, nil, err
+		}
+	}
+	return id, pass, nil
 }
 
 func openInput(arg string) (io.ReadCloser, string, error) {
@@ -292,7 +402,7 @@ func loadRecipient(s string) ([]byte, error) {
 	return pub, nil
 }
 
-func promptPassphrase(confirm bool) ([]byte, error) {
+func promptPassphrase(label string, confirm bool) ([]byte, error) {
 	tty, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
 	if err != nil {
 		if !term.IsTerminal(int(os.Stdin.Fd())) {
@@ -302,7 +412,7 @@ func promptPassphrase(confirm bool) ([]byte, error) {
 	} else {
 		defer tty.Close()
 	}
-	fmt.Fprint(os.Stderr, "passphrase: ")
+	fmt.Fprintf(os.Stderr, "%s: ", label)
 	p1, err := term.ReadPassword(int(tty.Fd()))
 	fmt.Fprintln(os.Stderr)
 	if err != nil {
