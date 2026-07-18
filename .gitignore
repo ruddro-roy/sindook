@@ -1,0 +1,6 @@
+/sindook
+*.key
+*.key.pub
+*.sindook
+coverage.out
+dist/
