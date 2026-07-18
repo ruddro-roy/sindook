@@ -48,7 +48,7 @@ Streams work:
 
 Every primitive comes from the Go standard library or golang.org/x/crypto: ML-KEM-768 (crypto/mlkem), X25519 (crypto/ecdh), SHA-3 and SHAKE-256 (crypto/sha3), ChaCha20-Poly1305, HKDF-SHA-256, HMAC, Argon2id. This project implements no primitives and invents no protocols: the keyslot model is LUKS, the header MAC and chunked payload are age, the KEM is the IETF draft.
 
-The one piece of specification-level cryptography here is the X-Wing key expansion and combiner, about 60 lines, validated against the draft's Appendix C vectors on every CI run.
+The one piece of specification-level cryptography here is the X-Wing key expansion and combiner, about 60 lines, validated against the draft's Appendix C vectors on every CI run. It is importable on its own as `github.com/ruddro-roy/sindook/xwing`; X-Wing is still an Internet-Draft, so treat that API as draft-stable until the RFC.
 
 One random file key per file is wrapped once per slot, each wrap bound to the file and the slot's own KDF parameters as associated data, the whole header sealed by a MAC only a file key holder can compute. Slots are length-prefixed so future slot types (new algorithms) can ship without breaking old readers. Payloads are sealed in 64 KiB ChaCha20-Poly1305 chunks with the chunk counter and a final-chunk flag bound into the nonce, so truncation, reordering and extension all fail authentication. Passphrase slots use Argon2id with RFC 9106 parameters, capped on read so hostile files cannot demand unbounded work.
 
@@ -60,12 +60,13 @@ Byte-level layout: [docs/FORMAT.md](docs/FORMAT.md). Threat model and rotation s
 
 runs the draft-10 key generation, derandomized encapsulation and decapsulation vectors, round trips at chunk boundaries, multi-recipient and mixed-slot cases, golden v1 fixture files that must stay readable forever, rewrap payload-preservation and revocation checks, and a tamper suite covering bit flips, truncation, extension, slot stripping, wrong keys and hostile headers. CI adds -race, vet, gofmt and govulncheck. The suite also passes in a clean golang:1.26 container.
 
+The `interop` module cross-tests the X-Wing implementation against Cloudflare's CIRCL and filippo.io/mlkem768/xwing on every CI run: the draft vectors through each implementation, seed-for-seed key agreement, and shared-secret agreement with encapsulation and decapsulation on each side in turn.
+
 ## Roadmap
 
 - ML-DSA signatures for sealed-file provenance
 - OPAQUE so passwords can authenticate without ever being sent
 - Hardware-backed identities (passkey PRF, FIDO2 hmac-secret)
-- Interop testing against other X-Wing implementations once the draft stabilizes
 
 ## Non-goals
 
