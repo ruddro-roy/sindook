@@ -21,5 +21,11 @@ jobs:
         run: go test -race ./...
       - name: interop
         run: cd interop && go vet ./... && go test ./...
+      - name: fuzz smoke
+        run: |
+          for target in FuzzOpen FuzzOpenPassphrase FuzzSealOpenRoundTrip FuzzBitFlip; do
+            go test ./internal/box -run='^$' -fuzz="^${target}\$" -fuzztime=30s
+          done
+          go test ./xwing -run='^$' -fuzz='^FuzzDecapsulate$' -fuzztime=30s
       - name: govulncheck
         run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
