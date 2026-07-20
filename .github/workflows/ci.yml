@@ -27,5 +27,7 @@ jobs:
             go test ./internal/box -run='^$' -fuzz="^${target}\$" -fuzztime=30s
           done
           go test ./xwing -run='^$' -fuzz='^FuzzDecapsulate$' -fuzztime=30s
+      - name: timing
+        run: SINDOOK_TIMING=1 go test ./xwing -run '^TestDecapsulationTiming$' -count=1 -v
       - name: govulncheck
         run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
