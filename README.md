@@ -1,5 +1,9 @@
 # sindook
 
+[![ci](https://github.com/ruddro-roy/sindook/actions/workflows/ci.yml/badge.svg)](https://github.com/ruddro-roy/sindook/actions/workflows/ci.yml)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/ruddro-roy/sindook/badge)](https://scorecard.dev/viewer/?uri=github.com/ruddro-roy/sindook)
+[![Go Reference](https://pkg.go.dev/badge/github.com/ruddro-roy/sindook/xwing.svg)](https://pkg.go.dev/github.com/ruddro-roy/sindook/xwing)
+
 Post-quantum file encryption with key rotation built in. Sindook is the Bengali word for a strongbox.
 
 sindook seals files so that an adversary who records the ciphertext today cannot decrypt it with a quantum computer later. Key establishment uses X-Wing, the hybrid KEM combining X25519 with ML-KEM-768 (NIST FIPS 203), implemented from draft-connolly-cfrg-xwing-kem-10 and verified byte for byte against the draft's published test vectors. Breaking a sealed file requires breaking both components.
@@ -11,6 +15,15 @@ What sets it apart is crypto-agility: sealed files carry key slots (the LUKS mod
     go install github.com/ruddro-roy/sindook/cmd/sindook@latest
 
 Requires Go 1.26 or newer. A container image builds from the included Dockerfile (distroless, under 10 MB).
+
+Release binaries for Linux, macOS, and Windows carry an SBOM, a cosign keyless signature, and SLSA build provenance. Verify before use:
+
+    cosign verify-blob checksums.txt --signature checksums.txt.sig --certificate checksums.txt.pem \
+      --certificate-identity-regexp 'github.com/ruddro-roy/sindook' \
+      --certificate-oidc-issuer https://token.actions.githubusercontent.com
+    gh attestation verify sindook_*.tar.gz --owner ruddro-roy
+
+Stability guarantees, including the promise that sealed files stay openable forever: [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md).
 
 ## Use
 
