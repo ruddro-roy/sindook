@@ -18,7 +18,7 @@ Requires Go 1.26 or newer. A container image builds from the included Dockerfile
 
 Release binaries for Linux, macOS, and Windows carry an SBOM, a cosign keyless signature, and SLSA build provenance. Verify before use:
 
-    cosign verify-blob checksums.txt --signature checksums.txt.sig --certificate checksums.txt.pem \
+    cosign verify-blob checksums.txt --bundle checksums.txt.sigstore.json \
       --certificate-identity-regexp 'github.com/ruddro-roy/sindook' \
       --certificate-oidc-issuer https://token.actions.githubusercontent.com
     gh attestation verify sindook_*.tar.gz --owner ruddro-roy
