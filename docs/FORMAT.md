@@ -75,3 +75,17 @@ Read support only. A v1 file is header, wrapped file key (48 bytes, ChaCha20-Pol
 Recipient mode header: magic `SINDOOK1` (8), mode `0x01` (1), X-Wing ciphertext (1120), file nonce (16). Wrap key: HKDF-SHA-256(shared secret, salt = file nonce, info = `sindook/v1/wrap`).
 
 Passphrase mode header: magic `SINDOOK1` (8), mode `0x02` (1), Argon2id passes (4), memory KiB (4), lanes (1), salt (16), file nonce (16). Wrap key: Argon2id(passphrase, salt, parameters). Same parameter caps as v2.
+
+## ASCII armor
+
+Optional transport encoding for any sealed file, produced by `seal -a` and detected automatically on read:
+
+    -----BEGIN SINDOOK ENCRYPTED FILE-----
+    base64, standard alphabet, 64-column lines, padding on the final line only
+    -----END SINDOOK ENCRYPTED FILE-----
+
+The armored bytes are exactly the binary file; armor adds no security and removes none. Readers are strict: ragged or blank body lines, padding before the final line, a missing end marker, and non-whitespace after it are all rejected. CRLF line endings and blank lines outside the markers are tolerated.
+
+## Protected identities
+
+`keygen -p` stores the identity as a standard sindook file with one passphrase slot whose plaintext is the ordinary identity text. Any sindook reader can decrypt it; tooling recognizes it by the file magic.

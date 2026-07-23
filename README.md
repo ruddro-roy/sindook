@@ -40,9 +40,21 @@ Rotate access in place. Fast mode rewrites only the header, so it costs the same
 
 Fast rewrap also upgrades v1 files to the current format in place. Removing a slot without `-deep` does not retroactively revoke someone who kept a copy of the old file; docs/SECURITY.md spells out exactly what each mode guarantees.
 
-Streams work:
+Streams work, every command takes many files, and `-R` reads a recipient list (concatenated .pub files work as-is):
 
     tar cz src | sindook seal -r my.key.pub -o src.tgz.sindook
+    sindook rewrap -i old.key -R team.keys backups/*.sindook
+
+Armor produces ASCII that survives email and copy-paste; open detects it automatically:
+
+    sindook seal -r alice.pub -a -o - secret.txt | pbcopy
+
+Prove backups still open without writing plaintext anywhere, and read a sealed file's metadata with no credentials at all:
+
+    sindook verify -i my.key backups/*.sindook
+    sindook inspect -json archive.tar.sindook
+
+For scripts, `-passfile` replaces the interactive prompt. `keygen -p` seals the identity file itself under a passphrase, so a stolen key file alone opens nothing. `sindook completion bash|zsh|fish` prints shell completions, and `sindook help <command>` shows flags and examples.
 
 ## Design
 

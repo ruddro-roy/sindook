@@ -39,6 +39,13 @@ The X-Wing code is validated against the draft's Appendix C test vectors on ever
 
 One deliberate deviation: the draft's Decapsulate uses raw RFC 7748 X25519, which returns an all-zero output for low-order inputs. crypto/ecdh rejects that case with an error, so sindook treats such ciphertexts as invalid. Honest senders never produce them.
 
+## Operational notes
+
+- `keygen -p` seals the identity file itself under a passphrase, so a stolen key file alone opens nothing. The .pub file stays public by design.
+- `-passfile` reads passphrases from a file rather than argv or the environment, which are visible in process listings. The file's permissions are the caller's responsibility.
+- Armor is transport encoding, not a security layer; armored and binary files carry identical ciphertext.
+- `inspect` reveals only the traffic-shape metadata listed above, which any holder of the file already has. Slot metadata is authenticated by the header MAC only once a credential opens the file, so until then it is a claim.
+
 ## Known limitations
 
 - Young project, no external audit. The design copies audited constructions to keep novel surface near zero.
