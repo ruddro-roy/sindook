@@ -9,11 +9,14 @@ import (
 )
 
 const (
-	version  = "0.4.0"
 	skPrefix = "sindooksk1:"
 	pkPrefix = "sindookpk1:"
 	ext      = ".sindook"
 )
+
+// version is the source-tree default; releases override it via
+// -X main.version so tagged binaries always report their tag.
+var version = "0.4.0"
 
 const usageMain = `sindook seals files so ciphertext recorded today stays sealed against a
 quantum computer later (X25519 + ML-KEM-768), and rotates access across

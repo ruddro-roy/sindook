@@ -5,3 +5,4 @@
 !internal/box/testdata/*.sindook
 coverage.out
 dist/
+dist/
