@@ -5,12 +5,15 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-go@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: stable
       - name: gofmt
@@ -27,6 +30,7 @@ jobs:
             go test ./internal/box -run='^$' -fuzz="^${target}\$" -fuzztime=30s
           done
           go test ./xwing -run='^$' -fuzz='^FuzzDecapsulate$' -fuzztime=30s
+          go test ./internal/armor -run='^$' -fuzz='^FuzzArmor$' -fuzztime=30s
       - name: timing
         run: SINDOOK_TIMING=1 go test ./xwing -run '^TestDecapsulationTiming$' -count=1 -v
       - name: govulncheck
