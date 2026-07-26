@@ -63,7 +63,7 @@ This is the STREAM construction as used by age. Truncation, chunk reordering, ch
 
 Rewrap parses a header (either version), recovers the file key with any valid credential, verifies header integrity, and writes a fresh v2 header for the new slot set.
 
-- Fast mode keeps the file key and file nonce, so the payload bytes are copied through untouched. Rotating recipients across any amount of data costs one header per file and plaintext never exists anywhere, not even in memory beyond the file key.
+- Fast mode keeps the file key and file nonce, so the payload bytes are copied through untouched. Rotating recipients costs one header of cryptographic work per file, whatever the payload size, and plaintext never exists anywhere, not even in memory beyond the file key. The payload ciphertext is still read and written verbatim, so total file I/O scales with the payload; format v3 removes that copy.
 - Deep mode draws a fresh file key and nonce and re-encrypts the payload by streaming decrypt and re-encrypt, one chunk in memory at a time.
 
 Fast mode does not retroactively revoke a removed recipient who kept a copy of the old file, because the file key is unchanged. Deep mode exists for exactly that case.

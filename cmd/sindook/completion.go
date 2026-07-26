@@ -19,7 +19,7 @@ const bashCompletion = `_sindook() {
     local cur cmd
     cur="${COMP_WORDS[COMP_CWORD]}"
     if [ "$COMP_CWORD" -eq 1 ]; then
-        COMPREPLY=($(compgen -W "keygen pubkey seal open verify inspect rewrap completion version help" -- "$cur"))
+        COMPREPLY=($(compgen -W "keygen pubkey seal open verify inspect rewrap migrate repair recover completion version help" -- "$cur"))
         return
     fi
     cmd="${COMP_WORDS[1]}"
@@ -27,17 +27,20 @@ const bashCompletion = `_sindook() {
         completion)
             COMPREPLY=($(compgen -W "bash zsh fish" -- "$cur")); return ;;
         help)
-            COMPREPLY=($(compgen -W "keygen pubkey seal open verify inspect rewrap completion version" -- "$cur")); return ;;
+            COMPREPLY=($(compgen -W "keygen pubkey seal open verify inspect rewrap migrate repair recover completion version" -- "$cur")); return ;;
     esac
     if [[ "$cur" == -* ]]; then
         local opts=""
         case "$cmd" in
             keygen)  opts="-o -p -passfile -f" ;;
-            seal)    opts="-r -R -p -passfile -a -o -f" ;;
+            seal)    opts="-r -R -p -passfile -format -header-capacity -reserve -a -o -f" ;;
             open)    opts="-i -p -passfile -o -f" ;;
             verify)  opts="-i -p -passfile" ;;
             inspect) opts="-json" ;;
-            rewrap)  opts="-i -p -passfile -r -R -new-passphrase -new-passfile -deep -o -f" ;;
+            rewrap)  opts="-i -p -passfile -r -R -new-passphrase -new-passfile -deep -expect-generation -json -o -f" ;;
+            migrate) opts="-i -p -passfile -r -R -new-passphrase -new-passfile -header-capacity -reserve -json" ;;
+            repair)  opts="-i -p -passfile -json" ;;
+            recover) opts="-i -p -passfile -o -f" ;;
         esac
         COMPREPLY=($(compgen -W "$opts" -- "$cur"))
     else
@@ -58,6 +61,9 @@ _sindook() {
         'verify:confirm sealed files decrypt cleanly'
         'inspect:show sealed-file metadata'
         'rewrap:rotate recipients, passphrases, or the file key'
+        'migrate:convert older files to the bounded-rotation format'
+        'repair:finish a rotation that was interrupted'
+        'recover:open a superseded header generation'
         'completion:print a shell completion script'
         'version:print version and build provenance'
         'help:show help for a command'
@@ -68,7 +74,7 @@ _sindook() {
     fi
     case "$words[2]" in
         completion) _values 'shell' bash zsh fish ;;
-        help)       _values 'command' keygen pubkey seal open verify inspect rewrap completion version ;;
+        help)       _values 'command' keygen pubkey seal open verify inspect rewrap migrate repair recover completion version ;;
         *)          _files ;;
     esac
 }
@@ -82,12 +88,15 @@ complete -c sindook -f -n '__fish_use_subcommand' -a open -d 'decrypt with an id
 complete -c sindook -f -n '__fish_use_subcommand' -a verify -d 'confirm sealed files decrypt cleanly'
 complete -c sindook -f -n '__fish_use_subcommand' -a inspect -d 'show sealed-file metadata'
 complete -c sindook -f -n '__fish_use_subcommand' -a rewrap -d 'rotate recipients, passphrases, or the file key'
+complete -c sindook -f -n '__fish_use_subcommand' -a migrate -d 'convert older files to the bounded-rotation format'
+complete -c sindook -f -n '__fish_use_subcommand' -a repair -d 'finish a rotation that was interrupted'
+complete -c sindook -f -n '__fish_use_subcommand' -a recover -d 'open a superseded header generation'
 complete -c sindook -f -n '__fish_use_subcommand' -a completion -d 'print a shell completion script'
 complete -c sindook -f -n '__fish_use_subcommand' -a version -d 'print version and build provenance'
 complete -c sindook -f -n '__fish_use_subcommand' -a help -d 'show help for a command'
 complete -c sindook -f -n '__fish_seen_subcommand_from completion' -a 'bash zsh fish'
-complete -c sindook -f -n '__fish_seen_subcommand_from help' -a 'keygen pubkey seal open verify inspect rewrap completion version'
-complete -c sindook -n '__fish_seen_subcommand_from seal open verify inspect rewrap pubkey' -F
+complete -c sindook -f -n '__fish_seen_subcommand_from help' -a 'keygen pubkey seal open verify inspect rewrap migrate repair recover completion version'
+complete -c sindook -n '__fish_seen_subcommand_from seal open verify inspect rewrap migrate repair recover pubkey' -F
 `
 
 func cmdCompletion(args []string) error {

@@ -3,6 +3,7 @@ package box
 import (
 	"bufio"
 	"encoding/binary"
+	"encoding/hex"
 	"io"
 
 	"golang.org/x/crypto/chacha20poly1305"
@@ -24,6 +25,37 @@ type Info struct {
 	Version    int        `json:"version"`
 	HeaderSize int64      `json:"header_size"`
 	Slots      []SlotInfo `json:"slots"`
+
+	// Arena is present only for format v3.
+	Arena *ArenaInfo `json:"arena,omitempty"`
+}
+
+// HeaderInfo describes one of a v3 file's two header slots. A slot that
+// failed structural parsing reports Present false and why, which is how an
+// interrupted rotation becomes visible without any credential.
+type HeaderInfo struct {
+	Index        int        `json:"index"`
+	Present      bool       `json:"present"`
+	Error        string     `json:"error,omitempty"`
+	Generation   uint64     `json:"generation,omitempty"`
+	PolicyDigest string     `json:"policy_digest,omitempty"`
+	UsedBytes    int        `json:"used_bytes,omitempty"`
+	Scrubbed     bool       `json:"scrubbed"`
+	Slots        []SlotInfo `json:"slots,omitempty"`
+}
+
+// ArenaInfo is the v3 header arena as a reader sees it before presenting any
+// credential. Everything here is a claim until a credential verifies the
+// header MAC.
+type ArenaInfo struct {
+	FileID        string       `json:"file_id"`
+	SlotCapacity  uint32       `json:"slot_capacity"`
+	ArenaBytes    int64        `json:"arena_bytes"`
+	PayloadOffset int64        `json:"payload_offset"`
+	Active        int          `json:"active_slot"`
+	Generation    uint64       `json:"generation"`
+	Scrubbed      bool         `json:"scrubbed"`
+	Headers       []HeaderInfo `json:"headers"`
 }
 
 // Inspect parses a v1 or v2 header from r without credentials. It applies
@@ -40,9 +72,77 @@ func Inspect(r io.Reader) (*Info, error) {
 		return inspectV1(br)
 	case magicV2:
 		return inspectV2(br)
+	case magicV3:
+		a, err := readArenaStream(br)
+		if err != nil {
+			return nil, err
+		}
+		return arenaInfo(a), nil
 	default:
 		return nil, ErrNotSindook
 	}
+}
+
+// InspectAt reads only the header arena of a v3 file, so inspecting an
+// archive costs the same whatever its size.
+func InspectAt(r io.ReaderAt) (*Info, error) {
+	a, err := readArenaAt(r)
+	if err != nil {
+		return nil, err
+	}
+	return arenaInfo(a), nil
+}
+
+func keySlotInfo(slots []parsedSlot) []SlotInfo {
+	out := make([]SlotInfo, 0, len(slots))
+	for _, s := range slots {
+		si := SlotInfo{Type: s.slotType, Body: len(s.body)}
+		if s.slotType == SlotPassphrase && len(s.body) == passSlotBody {
+			si.Argon = &Argon2idParams{
+				Time:      binary.BigEndian.Uint32(s.body[0:4]),
+				MemoryKiB: binary.BigEndian.Uint32(s.body[4:8]),
+				Threads:   s.body[8],
+			}
+		}
+		out = append(out, si)
+	}
+	return out
+}
+
+func arenaInfo(a *arena) *Info {
+	ai := &ArenaInfo{
+		FileID:        hex.EncodeToString(a.sb.fileID[:]),
+		SlotCapacity:  a.sb.slotCapacity,
+		ArenaBytes:    a.sb.arenaSize(),
+		PayloadOffset: a.sb.payloadOffset(),
+		Active:        -1,
+		Scrubbed:      a.scrubbed(),
+	}
+	for i, s := range a.slots {
+		h := HeaderInfo{Index: i}
+		if s == nil {
+			if a.errs[i] != nil {
+				h.Error = a.errs[i].Error()
+			}
+			ai.Headers = append(ai.Headers, h)
+			continue
+		}
+		h.Present = true
+		h.Generation = s.generation
+		h.PolicyDigest = digestString(s.policyDigest[:])
+		h.UsedBytes = s.usedLen
+		h.Scrubbed = s.scrubbed
+		h.Slots = keySlotInfo(s.keySlots)
+		ai.Headers = append(ai.Headers, h)
+	}
+
+	info := &Info{Version: 3, HeaderSize: a.sb.payloadOffset(), Arena: ai}
+	if order := a.order(); len(order) > 0 {
+		ai.Active = order[0]
+		ai.Generation = a.slots[order[0]].generation
+		info.Slots = ai.Headers[order[0]].Slots
+	}
+	return info
 }
 
 func inspectV2(br *bufio.Reader) (*Info, error) {

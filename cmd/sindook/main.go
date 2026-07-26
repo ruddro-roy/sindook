@@ -19,8 +19,8 @@ const (
 var version = "0.4.0"
 
 const usageMain = `sindook seals files so ciphertext recorded today stays sealed against a
-quantum computer later (X25519 + ML-KEM-768), and rotates access across
-any amount of data without re-encrypting it.
+quantum computer later (X25519 + ML-KEM-768), and rotates access without
+decrypting or re-encrypting the payload.
 
 usage: sindook <command> [flags] [FILE...]
 
@@ -31,6 +31,9 @@ usage: sindook <command> [flags] [FILE...]
   verify      confirm sealed files decrypt cleanly, writing nothing
   inspect     show sealed-file metadata, no credentials needed
   rewrap      rotate recipients, passphrases, or the file key
+  migrate     convert older files to the bounded-rotation format
+  repair      finish a rotation that was interrupted
+  recover     open a superseded header generation
   completion  print a bash, zsh, or fish completion script
   version     print version and build provenance
 
@@ -48,6 +51,9 @@ var commands = map[string]struct {
 	"verify":     {cmdVerify, usageVerify},
 	"inspect":    {cmdInspect, usageInspect},
 	"rewrap":     {cmdRewrap, usageRewrap},
+	"migrate":    {cmdMigrate, usageMigrate},
+	"repair":     {cmdRepair, usageRepair},
+	"recover":    {cmdRecover, usageRecover},
 	"completion": {cmdCompletion, usageCompletion},
 }
 

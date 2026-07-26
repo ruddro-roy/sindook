@@ -12,8 +12,9 @@
 
 Format v2 uses the LUKS keyslot model: one random file key, wrapped once per recipient or passphrase. The rewrap command replaces the slot set. Two honest properties to understand:
 
-- Fast rewrap rotates access without re-encrypting the payload and without plaintext ever existing. It is the right tool for adding people, algorithm migration, and format upgrades.
+- Fast rewrap rotates access without decrypting or re-encrypting the payload and without plaintext ever existing. It is the right tool for adding people, algorithm migration, and format upgrades. On format v2 the payload ciphertext is still copied verbatim, so the file is fully rewritten even though no payload cryptography runs; format v3 updates a fixed header arena in place and reads no payload bytes at all.
 - Fast rewrap is not retroactive revocation. A removed recipient who kept a copy of the old file still knows the file key. Deep rewrap re-encrypts the payload under a fresh key and is the right tool when someone must actually lose access.
+- Neither mode reaches copies that already left the file. Filesystem snapshots, copy-on-write media, object versions, backups, and any retained ciphertext copy stay readable under the old policy. Erasure is logical, scoped to the file that was rewritten.
 
 ## What it does not protect against
 

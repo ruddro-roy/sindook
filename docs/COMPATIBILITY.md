@@ -2,7 +2,9 @@
 
 ## Sealed files
 
-Every file sealed by a released version of sindook opens in every later release. Golden fixtures for each format version are committed to the test suite and checked on every CI run, so a change that breaks old files cannot merge. Format evolution is additive: new slot types and versions extend the header, readers skip slot types they do not know, and existing files are never rewritten except by an explicit rewrap.
+Every file sealed by a released version of sindook opens in every later release. Golden fixtures for each format version are committed to the test suite and checked on every CI run, so a change that breaks old files cannot merge. Format evolution is additive: new slot types and versions extend the header, readers skip slot types they do not know, and existing files are never rewritten except by an explicit rewrap or migrate.
+
+The promise runs forward, not backward. A file sealed in format v3 does not open in sindook 0.4.x or earlier, which predate the format. `seal` writes v3 from 0.5.0 on; pass `-format 2` when a file must be readable by an older build, and check what the recipient runs before sealing for them.
 
 ## CLI
 

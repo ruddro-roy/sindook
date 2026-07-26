@@ -215,8 +215,11 @@ func TestInspectJSON(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if rep.Version != 2 || len(rep.Slots) != 2 {
+	if rep.Version != 3 || len(rep.Slots) != 2 {
 		t.Fatalf("unexpected report: %+v", rep)
+	}
+	if rep.Arena == nil || rep.Arena.Generation != 1 || !rep.Arena.Scrubbed {
+		t.Fatalf("a freshly sealed v3 file should report a scrubbed generation 1 arena: %+v", rep.Arena)
 	}
 	if rep.PlaintextSize == nil || *rep.PlaintextSize != int64(len("inspect me")) {
 		t.Fatalf("plaintext size wrong: %+v", rep.PlaintextSize)
