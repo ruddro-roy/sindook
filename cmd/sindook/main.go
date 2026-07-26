@@ -15,8 +15,10 @@ const (
 )
 
 // version is the source-tree default; releases override it via
-// -X main.version so tagged binaries always report their tag.
-var version = "0.4.0"
+// -X main.version so tagged binaries always report their tag. The -dev
+// suffix marks a build from an untagged tree, so a binary installed from
+// the branch never claims to be a release that was not cut.
+var version = "0.5.0-dev"
 
 const usageMain = `sindook seals files so ciphertext recorded today stays sealed against a
 quantum computer later (X25519 + ML-KEM-768), and rotates access without
