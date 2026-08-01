@@ -17,17 +17,23 @@ import (
 // deterministic, and no modified byte of a valid file ever opens cleanly.
 // Crash regressions land in testdata/fuzz and replay under plain go test.
 
+// fuzzArgon mirrors testArgon in box_test.go; duplicated here so this file
+// stays self-contained for the ClusterFuzzLite libFuzzer build, which
+// compiles it without the rest of the test package.
+var fuzzArgon = Argon2idParams{Time: 1, MemoryKiB: 8, Threads: 1}
+
 // fuzzIdentity is the fixed identity of the v1 golden fixtures, so fixture
 // seeds reach past credential checks into MAC and payload verification.
-func fuzzIdentity(tb testing.TB) *xwing.PrivateKey {
-	tb.Helper()
+// It panics instead of taking a testing.TB so the libFuzzer shim, whose
+// testing package lacks TB, can compile this file.
+func fuzzIdentity() *xwing.PrivateKey {
 	seed, err := hex.DecodeString("7f9c2ba4e88f827d616045507605853ed73b8093f6efbc88eb1a6eacfa66ef26")
 	if err != nil {
-		tb.Fatal(err)
+		panic(err)
 	}
 	id, err := xwing.NewPrivateKey(seed)
 	if err != nil {
-		tb.Fatal(err)
+		panic(err)
 	}
 	return id
 }
@@ -41,20 +47,20 @@ func addFixtureSeeds(f *testing.F) {
 }
 
 // reopen requires that a blob which opened once opens again with identical
-// output, catching any state leaking between parses.
-func reopen(t *testing.T, data, want []byte, id *xwing.PrivateKey, pass []byte) {
-	t.Helper()
+// output, catching any state leaking between parses. Panic-based rather
+// than testing.T-based for the same shim-compatibility reason as above.
+func reopen(data, want []byte, id *xwing.PrivateKey, pass []byte) {
 	var again bytes.Buffer
 	if err := Open(&again, bytes.NewReader(data), id, pass); err != nil {
-		t.Fatalf("second open of accepted input failed: %v", err)
+		panic("second open of accepted input failed: " + err.Error())
 	}
 	if !bytes.Equal(again.Bytes(), want) {
-		t.Fatal("open is not deterministic")
+		panic("open is not deterministic")
 	}
 }
 
-func FuzzOpen(f *testing.F) {
-	id := fuzzIdentity(f)
+func FuzzOpenRecipient(f *testing.F) {
+	id := fuzzIdentity()
 	addFixtureSeeds(f)
 	var v2 bytes.Buffer
 	if err := Seal(&v2, bytes.NewReader([]byte("fuzz seed payload")), SealOptions{Recipients: [][]byte{id.PublicKey()}}); err != nil {
@@ -69,7 +75,7 @@ func FuzzOpen(f *testing.F) {
 		if err := Open(&out, bytes.NewReader(data), id, nil); err != nil {
 			return
 		}
-		reopen(t, data, out.Bytes(), id, nil)
+		reopen(data, out.Bytes(), id, nil)
 	})
 }
 
@@ -129,7 +135,7 @@ func FuzzOpenPassphrase(f *testing.F) {
 	pass := []byte("golden")
 	addFixtureSeeds(f)
 	var v2 bytes.Buffer
-	if err := Seal(&v2, bytes.NewReader([]byte("fuzz seed payload")), SealOptions{Passphrases: [][]byte{pass}, Argon: testArgon}); err != nil {
+	if err := Seal(&v2, bytes.NewReader([]byte("fuzz seed payload")), SealOptions{Passphrases: [][]byte{pass}, Argon: fuzzArgon}); err != nil {
 		f.Fatal(err)
 	}
 	f.Add(v2.Bytes())
@@ -142,12 +148,12 @@ func FuzzOpenPassphrase(f *testing.F) {
 		if err := Open(&out, bytes.NewReader(data), nil, pass); err != nil {
 			return
 		}
-		reopen(t, data, out.Bytes(), nil, pass)
+		reopen(data, out.Bytes(), nil, pass)
 	})
 }
 
 func FuzzSealOpenRoundTrip(f *testing.F) {
-	id := fuzzIdentity(f)
+	id := fuzzIdentity()
 	pass := []byte("fuzz")
 	f.Add([]byte(nil), false)
 	f.Add(bytes.Repeat([]byte{0xA5}, chunkSize+1), true)
@@ -156,7 +162,7 @@ func FuzzSealOpenRoundTrip(f *testing.F) {
 		opts := SealOptions{Recipients: [][]byte{id.PublicKey()}}
 		openID, openPass := id, []byte(nil)
 		if usePass {
-			opts = SealOptions{Passphrases: [][]byte{pass}, Argon: testArgon}
+			opts = SealOptions{Passphrases: [][]byte{pass}, Argon: fuzzArgon}
 			openID, openPass = nil, pass
 		}
 		var sealed bytes.Buffer
@@ -177,7 +183,7 @@ func FuzzSealOpenRoundTrip(f *testing.F) {
 // position and value the fuzzer reaches: XORing any byte of a valid sealed
 // file must never open cleanly, and appending trailing bytes must fail.
 func FuzzBitFlip(f *testing.F) {
-	id := fuzzIdentity(f)
+	id := fuzzIdentity()
 	plain := []byte("bit flip corpus payload, long enough to cross into the payload region")
 	var sealed bytes.Buffer
 	if err := Seal(&sealed, bytes.NewReader(plain), SealOptions{Recipients: [][]byte{id.PublicKey()}}); err != nil {
