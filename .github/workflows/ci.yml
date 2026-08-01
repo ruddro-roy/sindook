@@ -24,9 +24,41 @@ jobs:
         run: go test -race ./...
       - name: interop
         run: cd interop && go vet ./... && go test ./...
+      - name: bounded-io gate
+        # The whole point of format v3: a rotation must touch a fixed number
+        # of bytes. These cases run at 1 MiB, 1 GiB and a sparse 100 GiB and
+        # fail if the byte counts move.
+        run: go test ./internal/box -run '^TestRewrapAt|^TestInterruptedRotation$|^TestMigrateRoundTrip' -count=1 -v
+      - name: rotation benchmark
+        run: |
+          go test ./internal/box -run '^$' -bench '^BenchmarkRewrapAt$' -benchtime 20x | tee bench.txt
+          python3 - <<'PY'
+          import re, sys
+          rows = {}
+          for line in open("bench.txt"):
+              m = re.match(r"BenchmarkRewrapAt/payload=(\d+)MiB\S*\s+\d+\s+(\d+) ns/op\s+(\d+) bytes_read/op\s+(\d+) bytes_written/op", line)
+              if m:
+                  rows[int(m[1])] = (int(m[3]), int(m[4]))
+          if len(rows) < 2:
+              sys.exit("benchmark produced no comparable rows")
+          costs = set(rows.values())
+          if len(costs) != 1:
+              sys.exit(f"rotation cost varies with payload size: {rows}")
+          print(f"bounded: every payload size cost {costs.pop()} (bytes read, bytes written)")
+          PY
+          {
+            echo '### Rotation cost'
+            echo
+            echo 'Bytes read, bytes written and syncs must not vary with payload size.'
+            echo
+            echo '```'
+            grep BenchmarkRewrapAt bench.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
       - name: fuzz smoke
         run: |
-          for target in FuzzOpen FuzzOpenPassphrase FuzzSealOpenRoundTrip FuzzBitFlip; do
+          for target in FuzzOpen FuzzOpenPassphrase FuzzSealOpenRoundTrip FuzzBitFlip \
+                        FuzzOpenV3 FuzzInspectV3 FuzzArenaMutation FuzzRewrapAtArena; do
             go test ./internal/box -run='^$' -fuzz="^${target}\$" -fuzztime=30s
           done
           go test ./xwing -run='^$' -fuzz='^FuzzDecapsulate$' -fuzztime=30s

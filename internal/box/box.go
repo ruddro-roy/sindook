@@ -10,6 +10,7 @@ package box
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"crypto/hkdf"
 	"crypto/hmac"
 	"crypto/rand"
@@ -52,7 +53,10 @@ const (
 
 	wrapInfoV1 = "sindook/v1/wrap"
 	wrapInfoV2 = "sindook/v2/wrap"
-	hdrMACInfo = "sindook/v2/hdr-mac"
+	wrapInfoV3 = "sindook/v3/wrap"
+
+	hdrMACInfo   = "sindook/v2/hdr-mac"
+	hdrMACInfoV3 = "sindook/v3/hdr-mac"
 
 	// payloadInfo is shared by both format versions: the payload construction
 	// never changed, which is what lets Rewrap replace a header while leaving
@@ -161,16 +165,6 @@ func SealPassphrase(dst io.Writer, src io.Reader, passphrase []byte, p Argon2idP
 	return Seal(dst, src, SealOptions{Passphrases: [][]byte{passphrase}, Argon: p})
 }
 
-// slotAAD binds a slot's wrap to this file and to the slot's own public
-// parameters, so a slot cannot be transplanted or have its KDF downgraded.
-func slotAAD(fileNonce []byte, slotType byte, public []byte) []byte {
-	aad := make([]byte, 0, len(magicV2)+fileNonceSize+1+len(public))
-	aad = append(aad, magicV2...)
-	aad = append(aad, fileNonce...)
-	aad = append(aad, slotType)
-	return append(aad, public...)
-}
-
 func wrapSeal(wrapKey, fileKey, aad []byte) ([]byte, error) {
 	aead, err := chacha20poly1305.New(wrapKey)
 	if err != nil {
@@ -200,52 +194,16 @@ func headerMAC(fileKey, fileNonce, header []byte) ([]byte, error) {
 }
 
 func writeHeaderV2(dst io.Writer, fileKey, fileNonce []byte, opts SealOptions) error {
+	slots, err := buildKeySlots(fileKey, profileV2(fileNonce), opts)
+	if err != nil {
+		return err
+	}
+
 	var hdr bytes.Buffer
 	hdr.WriteString(magicV2)
 	hdr.Write(fileNonce)
-	hdr.WriteByte(byte(len(opts.Recipients) + len(opts.Passphrases)))
-
-	appendSlot := func(slotType byte, body []byte) {
-		hdr.WriteByte(slotType)
-		var l [2]byte
-		binary.BigEndian.PutUint16(l[:], uint16(len(body)))
-		hdr.Write(l[:])
-		hdr.Write(body)
-	}
-
-	for _, pub := range opts.Recipients {
-		ss, kemCT, err := xwing.Encapsulate(pub)
-		if err != nil {
-			return err
-		}
-		wrapKey, err := hkdf.Key(sha256.New, ss, fileNonce, wrapInfoV2, chacha20poly1305.KeySize)
-		if err != nil {
-			return err
-		}
-		wrapped, err := wrapSeal(wrapKey, fileKey, slotAAD(fileNonce, SlotXWing, kemCT))
-		if err != nil {
-			return err
-		}
-		appendSlot(SlotXWing, append(kemCT, wrapped...))
-	}
-
-	for _, pass := range opts.Passphrases {
-		salt := make([]byte, saltSize)
-		if _, err := rand.Read(salt); err != nil {
-			return err
-		}
-		public := make([]byte, 0, 9+saltSize)
-		public = binary.BigEndian.AppendUint32(public, opts.Argon.Time)
-		public = binary.BigEndian.AppendUint32(public, opts.Argon.MemoryKiB)
-		public = append(public, opts.Argon.Threads)
-		public = append(public, salt...)
-		wrapKey := argon2.IDKey(pass, salt, opts.Argon.Time, opts.Argon.MemoryKiB, opts.Argon.Threads, chacha20poly1305.KeySize)
-		wrapped, err := wrapSeal(wrapKey, fileKey, slotAAD(fileNonce, SlotPassphrase, public))
-		if err != nil {
-			return err
-		}
-		appendSlot(SlotPassphrase, append(public, wrapped...))
-	}
+	hdr.WriteByte(byte(len(slots)))
+	hdr.Write(encodeKeySlots(slots))
 
 	mac, err := headerMAC(fileKey, fileNonce, hdr.Bytes())
 	if err != nil {
@@ -276,6 +234,8 @@ func unlock(br *bufio.Reader, identity *xwing.PrivateKey, passphrase []byte) (fi
 		return unlockV1(br, identity, passphrase)
 	case magicV2:
 		return unlockV2(br, identity, passphrase)
+	case magicV3:
+		return unlockV3(br, identity, passphrase)
 	default:
 		return nil, nil, ErrNotSindook
 	}
@@ -319,59 +279,12 @@ func unlockV2(br *bufio.Reader, identity *xwing.PrivateKey, passphrase []byte) (
 		return nil, nil, ErrNotSindook
 	}
 
-	var sawXWing, sawPass bool
-	var fileKey []byte
-	for _, s := range slots {
-		switch s.slotType {
-		case SlotXWing:
-			sawXWing = true
-			if identity == nil || fileKey != nil || len(s.body) != xwingSlotBody {
-				continue
-			}
-			kemCT := s.body[:xwing.CiphertextSize]
-			ss, err := identity.Decapsulate(kemCT)
-			if err != nil {
-				continue
-			}
-			wrapKey, err := hkdf.Key(sha256.New, ss, fileNonce, wrapInfoV2, chacha20poly1305.KeySize)
-			if err != nil {
-				return nil, nil, err
-			}
-			if fk, err := wrapOpen(wrapKey, s.body[xwing.CiphertextSize:], slotAAD(fileNonce, SlotXWing, kemCT)); err == nil {
-				fileKey = fk
-			}
-		case SlotPassphrase:
-			sawPass = true
-			if passphrase == nil || fileKey != nil || len(s.body) != passSlotBody {
-				continue
-			}
-			public := s.body[:9+saltSize]
-			p := Argon2idParams{
-				Time:      binary.BigEndian.Uint32(public[0:4]),
-				MemoryKiB: binary.BigEndian.Uint32(public[4:8]),
-				Threads:   public[8],
-			}
-			if err := p.validate(); err != nil {
-				continue
-			}
-			salt := public[9 : 9+saltSize]
-			wrapKey := argon2.IDKey(passphrase, salt, p.Time, p.MemoryKiB, p.Threads, chacha20poly1305.KeySize)
-			if fk, err := wrapOpen(wrapKey, s.body[9+saltSize:], slotAAD(fileNonce, SlotPassphrase, public)); err == nil {
-				fileKey = fk
-			}
-		default:
-			// Unknown slot type from a future version: unusable here but
-			// still covered by the header MAC below.
-		}
+	fileKey, sawXWing, sawPass, err := openKeySlots(slots, profileV2(fileNonce), identity, passphrase)
+	if err != nil {
+		return nil, nil, err
 	}
 	if fileKey == nil {
-		if identity == nil && sawXWing {
-			return nil, nil, ErrNeedIdentity
-		}
-		if passphrase == nil && sawPass {
-			return nil, nil, ErrNeedPassphrase
-		}
-		return nil, nil, ErrWrongKey
+		return nil, nil, credentialError(identity, passphrase, sawXWing, sawPass)
 	}
 
 	wantMAC, err := headerMAC(fileKey, fileNonce, hdr.Bytes())
@@ -459,9 +372,11 @@ func Open(dst io.Writer, src io.Reader, identity *xwing.PrivateKey, passphrase [
 }
 
 // Rewrap rewrites the key slots of a sealed file. In the default fast mode
-// the file key and payload bytes are carried over untouched, so recipients
-// can be rotated across any amount of data in constant time per file and
-// plaintext never exists anywhere. With deep=true the payload is
+// the file key and payload bytes are carried over untouched, so the
+// cryptographic work of a rotation is one header per file whatever the
+// payload size and plaintext never exists anywhere. The payload ciphertext
+// is still copied verbatim from src to dst, so total I/O scales with the
+// payload; RewrapAt on a v3 file avoids that copy. With deep=true the payload is
 // re-encrypted under a fresh file key by streaming decrypt and re-encrypt,
 // one chunk in memory at a time. Fast mode does not retroactively revoke a
 // removed recipient who already held a copy of the old file; deep mode does.
@@ -470,6 +385,12 @@ func Rewrap(dst io.Writer, src io.Reader, identity *xwing.PrivateKey, passphrase
 		return err
 	}
 	br := bufio.NewReaderSize(src, chunkSize+chacha20poly1305.Overhead)
+	// A v3 file rotates as a v3 file. Streaming through Rewrap must never
+	// silently downgrade a bounded-rotation archive to a format that cannot
+	// rotate in place.
+	if v, verr := peekVersion(br); verr == nil && v == 3 {
+		return rewrapV3Stream(dst, br, identity, passphrase, opts, deep)
+	}
 	fileKey, fileNonce, err := unlock(br, identity, passphrase)
 	if err != nil {
 		return err
@@ -556,6 +477,26 @@ func sealPayload(dst io.Writer, src io.Reader, key []byte) error {
 			return nil
 		}
 	}
+}
+
+// ctxReader makes a long payload read cancellable. Verifying a hundred
+// gigabyte archive should stop when the operator stops it, not when the file
+// ends.
+type ctxReader struct {
+	ctx context.Context
+	r   io.Reader
+}
+
+func (c ctxReader) Read(p []byte) (int, error) {
+	if err := c.ctx.Err(); err != nil {
+		return 0, err
+	}
+	return c.r.Read(p)
+}
+
+func openPayloadFrom(ctx context.Context, r io.Reader, dst io.Writer, key []byte) error {
+	br := bufio.NewReaderSize(ctxReader{ctx: ctx, r: r}, chunkSize+chacha20poly1305.Overhead)
+	return openPayload(dst, br, key)
 }
 
 func openPayload(dst io.Writer, br *bufio.Reader, key []byte) error {

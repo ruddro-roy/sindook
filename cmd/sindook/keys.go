@@ -244,6 +244,16 @@ func buildSealOptions(recipients, recipientFiles []string, withPassphrase bool, 
 	return opts, nil
 }
 
+// buildOptionalSealOptions is buildSealOptions without the "at least one
+// slot" requirement, for migrate, which can reuse the passphrase that opened
+// a passphrase-only file and reports its own error when it cannot.
+func buildOptionalSealOptions(recipients, recipientFiles []string, withPassphrase bool, passfile string) (box.SealOptions, error) {
+	if len(recipients) == 0 && len(recipientFiles) == 0 && !withPassphrase && passfile == "" {
+		return box.SealOptions{Argon: box.DefaultArgon2id}, nil
+	}
+	return buildSealOptions(recipients, recipientFiles, withPassphrase, passfile, "new passphrase")
+}
+
 // loadCredentials resolves the identity and passphrase used for opening.
 func loadCredentials(idPath string, usePass bool, passfile, passLabel string) (*xwing.PrivateKey, []byte, error) {
 	usePass = usePass || passfile != ""

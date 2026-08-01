@@ -32,6 +32,7 @@ type inspectReport struct {
 	FileSize      *int64         `json:"file_size,omitempty"`
 	PlaintextSize *int64         `json:"plaintext_size,omitempty"`
 	Slots         []box.SlotInfo `json:"slots"`
+	Arena         *box.ArenaInfo `json:"arena,omitempty"`
 }
 
 func cmdInspect(args []string) error {
@@ -91,6 +92,7 @@ func inspectOne(inPath string) (inspectReport, error) {
 	rep.Version = info.Version
 	rep.HeaderSize = info.HeaderSize
 	rep.Slots = info.Slots
+	rep.Arena = info.Arena
 	// Armor inflates the on-disk size, so plaintext size is only derivable
 	// for binary regular files.
 	if size >= 0 && !armored {
@@ -118,6 +120,22 @@ func printReport(rep inspectReport) {
 	default:
 		fmt.Printf("  header %s\n", humanBytes(rep.HeaderSize))
 	}
+	if a := rep.Arena; a != nil {
+		fmt.Printf("  arena %s per slot, payload at %d, generation %d in slot %d\n",
+			humanBytes(int64(a.SlotCapacity)), a.PayloadOffset, a.Generation, a.Active)
+		if !a.Scrubbed {
+			fmt.Print("  WARNING: a rotation did not complete; a superseded policy may still be\n" +
+				"           recoverable from this file. Run \"sindook repair\" to finish the scrub.\n")
+			for _, h := range a.Headers {
+				switch {
+				case !h.Present:
+					fmt.Printf("    header %d: unreadable (%s)\n", h.Index, h.Error)
+				default:
+					fmt.Printf("    header %d: generation %d, %d key slot(s)\n", h.Index, h.Generation, len(h.Slots))
+				}
+			}
+		}
+	}
 	fmt.Printf("  %d key slot(s):\n", len(rep.Slots))
 	for i, s := range rep.Slots {
 		fmt.Printf("    %d. %s\n", i+1, describeSlot(rep.Version, s))
@@ -130,7 +148,7 @@ func describeSlot(version int, s box.SlotInfo) string {
 			s.Argon.Time, humanBytes(int64(s.Argon.MemoryKiB)*1024), s.Argon.Threads)
 	}
 	switch {
-	case version == 2 && s.Type == box.SlotXWing, version == 1 && s.Type == 0x01:
+	case version >= 2 && s.Type == box.SlotXWing, version == 1 && s.Type == 0x01:
 		return "x-wing recipient (X25519 + ML-KEM-768)"
 	default:
 		return fmt.Sprintf("unknown slot type 0x%02x (%d bytes, newer format?)", s.Type, s.Body)
