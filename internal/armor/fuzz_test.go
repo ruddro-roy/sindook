@@ -55,3 +55,5 @@ func FuzzArmor(f *testing.F) {
 		}
 	})
 }
+
+// CI validation: exercises the ClusterFuzzLite PR workflow.
