@@ -1,5 +1,5 @@
 #!/bin/bash -eu
-go get github.com/AdamKorcz/go-118-fuzz-build/testing
+go get github.com/AdamKorcz/go-118-fuzz-build/testing@v0.0.0-20250520111509-a70c2aa677fa
 compile_native_go_fuzzer github.com/ruddro-roy/sindook/internal/box FuzzOpenRecipient fuzz_box_open
 compile_native_go_fuzzer github.com/ruddro-roy/sindook/internal/box FuzzOpenPassphrase fuzz_box_open_passphrase
 compile_native_go_fuzzer github.com/ruddro-roy/sindook/internal/box FuzzSealOpenRoundTrip fuzz_box_seal_open_round_trip

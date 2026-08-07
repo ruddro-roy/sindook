@@ -13,7 +13,7 @@
 # limitations under the License.
 #
 ################################################################################
-FROM gcr.io/oss-fuzz-base/base-builder-go
+FROM gcr.io/oss-fuzz-base/base-builder-go@sha256:e5e5ecf4fb18a2f47bf0462c37e35728e8f6023ee4b7ff8bc5f903e6acba46da
 RUN git clone --depth 1 https://github.com/ruddro-roy/sindook
 WORKDIR sindook
 COPY build.sh $SRC/
