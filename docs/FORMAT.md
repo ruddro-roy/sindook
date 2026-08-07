@@ -1,6 +1,6 @@
 # sindook file formats
 
-Integers are big-endian, sizes in bytes. Format v2 is written by sindook 0.2.0 and later; v1 files remain readable forever, proven by golden fixtures in the test suite.
+Integers are big-endian, sizes in bytes. Format v2 is written by sindook 0.2.0 and later; v1 files remain supported and are covered by golden fixtures in the test suite.
 
 ## Format v2
 
@@ -63,10 +63,10 @@ This is the STREAM construction as used by age. Truncation, chunk reordering, ch
 
 Rewrap parses a header (either version), recovers the file key with any valid credential, verifies header integrity, and writes a fresh v2 header for the new slot set.
 
-- Fast mode keeps the file key and file nonce, so the payload bytes are copied through untouched. Rotating recipients across any amount of data costs one header per file and plaintext never exists anywhere, not even in memory beyond the file key.
+- Fast mode keeps the file key and file nonce, so the payload bytes are copied through unchanged. It requires a fresh header and a ciphertext copy, but does not decrypt or re-encrypt the payload or materialize payload plaintext.
 - Deep mode draws a fresh file key and nonce and re-encrypts the payload by streaming decrypt and re-encrypt, one chunk in memory at a time.
 
-Fast mode does not retroactively revoke a removed recipient who kept a copy of the old file, because the file key is unchanged. Deep mode exists for exactly that case.
+Fast mode does not revoke a removed recipient who kept a copy of the old file, because the file key is unchanged. Deep mode makes the replacement inaccessible through old slots, but cannot invalidate older copies.
 
 ## Format v1, legacy
 

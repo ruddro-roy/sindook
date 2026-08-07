@@ -18,9 +18,9 @@ const (
 // -X main.version so tagged binaries always report their tag.
 var version = "0.4.0"
 
-const usageMain = `sindook seals files so ciphertext recorded today stays sealed against a
-quantum computer later (X25519 + ML-KEM-768), and rotates access across
-any amount of data without re-encrypting it.
+const usageMain = `sindook seals files with hybrid X25519 + ML-KEM-768 recipient slots
+and can rotate access without decrypting or re-encrypting the payload in
+fast mode. Fast rewrap still copies ciphertext to a replacement file.
 
 usage: sindook <command> [flags] [FILE...]
 

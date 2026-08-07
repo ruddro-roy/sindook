@@ -458,13 +458,14 @@ func Open(dst io.Writer, src io.Reader, identity *xwing.PrivateKey, passphrase [
 	return openPayload(dst, br, payloadKey)
 }
 
-// Rewrap rewrites the key slots of a sealed file. In the default fast mode
-// the file key and payload bytes are carried over untouched, so recipients
-// can be rotated across any amount of data in constant time per file and
-// plaintext never exists anywhere. With deep=true the payload is
-// re-encrypted under a fresh file key by streaming decrypt and re-encrypt,
-// one chunk in memory at a time. Fast mode does not retroactively revoke a
-// removed recipient who already held a copy of the old file; deep mode does.
+// Rewrap rewrites the key slots of a sealed file. In the default fast mode,
+// the file key and payload bytes are carried over without decrypting or
+// re-encrypting the payload, although the ciphertext is copied to dst. With
+// deep=true the payload is re-encrypted under a fresh file key by streaming
+// decrypt and re-encrypt, one chunk in memory at a time. Fast mode does not
+// revoke a removed recipient who already held a copy of the old file. Deep
+// mode makes the newly produced replacement inaccessible through the old
+// file key, but cannot invalidate older copies.
 func Rewrap(dst io.Writer, src io.Reader, identity *xwing.PrivateKey, passphrase []byte, opts SealOptions, deep bool) error {
 	if err := opts.validate(); err != nil {
 		return err

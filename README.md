@@ -4,26 +4,28 @@
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/ruddro-roy/sindook/badge)](https://scorecard.dev/viewer/?uri=github.com/ruddro-roy/sindook)
 [![Go Reference](https://pkg.go.dev/badge/github.com/ruddro-roy/sindook/xwing.svg)](https://pkg.go.dev/github.com/ruddro-roy/sindook/xwing)
 
-Post-quantum file encryption with key rotation built in. Sindook is the Bengali word for a strongbox.
+Hybrid post-quantum file encryption with key rotation built in. Sindook is the Bengali word for a strongbox.
 
-sindook seals files so that an adversary who records the ciphertext today cannot decrypt it with a quantum computer later. Key establishment uses X-Wing, the hybrid KEM combining X25519 with ML-KEM-768 (NIST FIPS 203), implemented from draft-connolly-cfrg-xwing-kem-10 and verified byte for byte against the draft's published test vectors. Breaking a sealed file requires breaking both components.
+Sindook is a usable pre-1.0 command-line tool for encrypting files for recipients, passphrases, or both. Recipient key establishment uses [X-Wing draft-10](https://datatracker.ietf.org/doc/draft-connolly-cfrg-xwing-kem/10/), the hybrid KEM combining X25519 with ML-KEM-768 from [NIST FIPS 203](https://csrc.nist.gov/pubs/fips/203/final). The repository's X-Wing implementation is verified byte-for-byte against the draft's published vectors and cross-tested against independent implementations. The hybrid design is intended to require an attacker to defeat both components, subject to the draft's security model and the implementation assumptions described below.
 
-What sets it apart is crypto-agility: sealed files carry key slots (the LUKS model), and `rewrap` rotates recipients, passphrases, formats, and eventually algorithms across any amount of data by rewriting only the header. Payload bytes are untouched and plaintext never exists anywhere. That is the operation every post-quantum migration needs and most file encryption tools cannot do.
+Each sealed file carries key slots, following the LUKS model. `rewrap` can rotate recipients, passphrases, and format versions without decrypting or re-encrypting the payload in fast mode. Fast rewrap writes a new header and copies the existing ciphertext into a replacement file. Deep rewrap generates a fresh file key and re-encrypts the replacement payload, so removed recipients cannot open that replacement through an old slot. Neither mode can invalidate copies already held by an attacker.
+
+> **Status:** Sindook is pre-1.0 and has not received an independent security audit. It is not FIPS validated and does not claim to be quantum-proof. Read the [threat model](docs/THREAT_MODEL.md), [security model](docs/SECURITY.md), and [security policy](SECURITY.md) before using it for sensitive data.
 
 ## Install
 
     go install github.com/ruddro-roy/sindook/cmd/sindook@latest
 
-Requires Go 1.26 or newer. A container image builds from the included Dockerfile (distroless, under 10 MB).
+Requires Go 1.26 or newer. A minimal distroless container image builds from the included Dockerfile.
 
-Release binaries for Linux, macOS, and Windows carry an SBOM, a cosign keyless signature, and SLSA build provenance. Verify before use:
+Release binaries for Linux, macOS, and Windows carry an SBOM, a cosign keyless signature, and GitHub build provenance. Verify before use:
 
     cosign verify-blob checksums.txt --bundle checksums.txt.sigstore.json \
       --certificate-identity-regexp 'github.com/ruddro-roy/sindook' \
       --certificate-oidc-issuer https://token.actions.githubusercontent.com
     gh attestation verify sindook_*.tar.gz --owner ruddro-roy
 
-Stability guarantees, including the promise that sealed files stay openable forever: [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md).
+Compatibility policy and tested file-format support: [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md).
 
 ## Use
 
@@ -43,15 +45,15 @@ Passphrase only:
     sindook seal -p notes.txt
     sindook open -p notes.txt.sindook
 
-Rotate access in place. Fast mode rewrites only the header, so it costs the same for a kilobyte or a terabyte:
+Rotate access in place. Fast mode preserves the payload ciphertext, but still copies it into a replacement file:
 
     # replace the key slots: alice stays, bob is added
     sindook rewrap -i my.key -r alice.pub -r bob.pub archive.tar.sindook
 
-    # someone left and must actually lose access: re-encrypt the payload too
+    # someone left and must lose access to the replacement file
     sindook rewrap -i my.key -r alice.pub -deep archive.tar.sindook
 
-Fast rewrap also upgrades v1 files to the current format in place. Removing a slot without `-deep` does not retroactively revoke someone who kept a copy of the old file; docs/SECURITY.md spells out exactly what each mode guarantees.
+Fast rewrap also upgrades v1 files to the current format in place. Removing a slot without `-deep` does not retroactively revoke someone who kept a copy of the old file; [docs/SECURITY.md](docs/SECURITY.md) spells out exactly what each mode guarantees.
 
 Streams work, every command takes many files, and `-R` reads a recipient list (concatenated .pub files work as-is):
 
@@ -67,35 +69,39 @@ Prove backups still open without writing plaintext anywhere, and read a sealed f
     sindook verify -i my.key backups/*.sindook
     sindook inspect -json archive.tar.sindook
 
-For scripts, `-passfile` replaces the interactive prompt. `keygen -p` seals the identity file itself under a passphrase, so a stolen key file alone opens nothing. `sindook completion bash|zsh|fish` prints shell completions, and `sindook help <command>` shows flags and examples.
+For scripts, `-passfile` replaces the interactive prompt. `keygen -p` seals the identity file itself under a passphrase, so a stolen key file alone opens nothing. `sindook completion bash|zsh|fish` prints shell completions, and `sindook help <command>` shows flags and examples. The [user guide](docs/USER_GUIDE.md) covers safe output behavior, backup verification, streams, and recovery.
 
 ## Design
 
-Every primitive comes from the Go standard library or golang.org/x/crypto: ML-KEM-768 (crypto/mlkem), X25519 (crypto/ecdh), SHA-3 and SHAKE-256 (crypto/sha3), ChaCha20-Poly1305, HKDF-SHA-256, HMAC, Argon2id. This project implements no primitives and invents no protocols: the keyslot model is LUKS, the header MAC and chunked payload are age, the KEM is the IETF draft.
+The underlying primitives come from the Go standard library or golang.org/x/crypto: ML-KEM-768 (crypto/mlkem), X25519 (crypto/ecdh), SHA-3 and SHAKE-256 (crypto/sha3), ChaCha20-Poly1305, HKDF-SHA-256, HMAC, and Argon2id. Sindook does not implement these underlying primitives. It does implement the X-Wing draft's expansion and combiner, plus its documented file format and keyslot composition; these project-level constructions have not received an independent audit.
 
-The one piece of specification-level cryptography here is the X-Wing key expansion and combiner, about 60 lines, validated against the draft's Appendix C vectors on every CI run. It is importable on its own as `github.com/ruddro-roy/sindook/xwing`; X-Wing is still an Internet-Draft, so treat that API as draft-stable until the RFC.
+The X-Wing integration is the main project-level cryptographic code, about 60 lines of expansion and combiner logic. It is validated against the draft's Appendix C vectors on every CI run and is importable as `github.com/ruddro-roy/sindook/xwing`. X-Wing is still an Internet-Draft, so treat that API as draft-stable until the RFC.
 
 One random file key per file is wrapped once per slot, each wrap bound to the file and the slot's own KDF parameters as associated data, the whole header sealed by a MAC only a file key holder can compute. Slots are length-prefixed so future slot types (new algorithms) can ship without breaking old readers. Payloads are sealed in 64 KiB ChaCha20-Poly1305 chunks with the chunk counter and a final-chunk flag bound into the nonce, so truncation, reordering and extension all fail authentication. Passphrase slots use Argon2id with RFC 9106 parameters, capped on read so hostile files cannot demand unbounded work.
 
-Byte-level layout: [docs/FORMAT.md](docs/FORMAT.md). Threat model and rotation semantics: [docs/SECURITY.md](docs/SECURITY.md).
+Byte-level layout: [docs/FORMAT.md](docs/FORMAT.md). Security design and rotation semantics: [docs/SECURITY.md](docs/SECURITY.md). Threat-model boundaries: [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md).
 
 ## Verification
 
     go test ./...
 
-runs the draft-10 key generation, derandomized encapsulation and decapsulation vectors, round trips at chunk boundaries, multi-recipient and mixed-slot cases, golden v1 fixture files that must stay readable forever, rewrap payload-preservation and revocation checks, and a tamper suite covering bit flips, truncation, extension, slot stripping, wrong keys and hostile headers. CI adds -race, vet, gofmt and govulncheck. The suite also passes in a clean golang:1.26 container.
+runs the draft-10 key generation, derandomized encapsulation and decapsulation vectors, round trips at chunk boundaries, multi-recipient and mixed-slot cases, golden v1 fixture files, rewrap payload-preservation and revocation checks, and a tamper suite covering bit flips, truncation, extension, slot stripping, wrong keys, hostile headers, forced-output safety, and symbolic-link refusal. The CI configuration adds race detection, vet, formatting, fuzz smoke tests, `govulncheck`, interoperability checks, and CodeQL on Go 1.26.
 
 The `interop` module cross-tests the X-Wing implementation against Cloudflare's CIRCL and filippo.io/mlkem768/xwing on every CI run: the draft vectors through each implementation, seed-for-seed key agreement, and shared-secret agreement with encapsulation and decapsulation on each side in turn.
 
-## Roadmap
+## Project documentation
 
-- ML-DSA signatures for sealed-file provenance
-- OPAQUE so passwords can authenticate without ever being sent
-- Hardware-backed identities (passkey PRF, FIDO2 hmac-secret)
+- [User guide](docs/USER_GUIDE.md)
+- [Threat model](docs/THREAT_MODEL.md)
+- [Security model](docs/SECURITY.md) and [security reporting policy](SECURITY.md)
+- [Format specification](docs/FORMAT.md) and [compatibility promise](docs/COMPATIBILITY.md)
+- [Release process](docs/RELEASING.md)
+- [Roadmap](docs/ROADMAP.md)
+- [Contributing](CONTRIBUTING.md)
 
 ## Non-goals
 
-No homemade primitives and no protocol invention. Where a well-audited construction exists, sindook uses that construction.
+No new cryptographic primitives. Sindook favors established components, but users should treat its complete file format and key-management design as unaudited until an independent review is completed.
 
 ## License
 
