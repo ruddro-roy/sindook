@@ -111,7 +111,7 @@ tar cz project | sindook seal -r personal.key.pub -o project.tgz.sindook
 sindook open -i personal.key -o - project.tgz.sindook | tar xz
 ```
 
-By default, Sindook refuses to overwrite a destination. Use `-f` only when replacement is intentional. With `-f`, it stages output beside the destination and replaces it only after a successful write; symbolic links and non-regular destinations are refused. On POSIX systems, new sealed and plaintext output files are mode `0600`; public key files are mode `0644`.
+By default, Sindook refuses to overwrite a destination. Use `-f` only when replacement is intentional. With `-f`, it stages output beside the destination and replaces it only after a successful write; symbolic links and non-regular destinations are refused. On POSIX systems, new sealed and plaintext output files are mode `0600`; public key files are mode `0644`. On Windows, Sindook does not set an owner-only ACL. Access follows Windows and the destination directory's ACL.
 
 Same-directory rename behavior is platform-dependent. Keep backups of important files and use `verify` after a storage migration or rewrap.
 

@@ -32,7 +32,7 @@ Compatibility policy and tested file-format support: [docs/COMPATIBILITY.md](doc
 Generate an identity:
 
     sindook keygen -o my.key
-    # writes my.key (secret, 0600) and my.key.pub (shareable)
+    # on POSIX, writes my.key (secret, mode 0600) and my.key.pub (shareable)
 
 Seal to one or more recipients, optionally with a recovery passphrase, and open:
 
