@@ -1,8 +1,8 @@
 # Security model
 
-## What sindook protects against
+## What Sindook is designed to protect against
 
-- Harvest now, decrypt later. Every key in a sealed file descends from the X-Wing shared secret. Recovering it requires breaking both X25519 and ML-KEM-768.
+- Harvest now, decrypt later for recipient slots. The wrapped file key in an X-Wing recipient slot is derived from the X-Wing shared secret. The hybrid construction is designed to require an attacker to defeat both X25519 and ML-KEM-768, subject to the X-Wing draft's security model and the implementation assumptions in this repository. A file sealed only with a passphrase does not have this property; its protection depends on the passphrase and Argon2id.
 - Tampering. Every slot wrap is bound to the file and its own parameters as associated data, the whole header is authenticated by a MAC keyed by the file key, and every payload chunk carries its position and finality in the nonce. Decryption emits plaintext incrementally, so what has been emitted is always an authenticated prefix of the original file, and any modification is detected at the damaged chunk.
 - Slot manipulation. Adding, removing, or reordering key slots breaks the header MAC, which every open verifies before touching the payload.
 - Hostile files. Headers are fixed-structure fields with capped lengths, slot count at most 32, slot bodies at most 4096 bytes. Argon2id parameters found in a file are capped (64 passes, 1 GiB, 64 lanes) before any work is done.
@@ -12,8 +12,8 @@
 
 Format v2 uses the LUKS keyslot model: one random file key, wrapped once per recipient or passphrase. The rewrap command replaces the slot set. Two honest properties to understand:
 
-- Fast rewrap rotates access without re-encrypting the payload and without plaintext ever existing. It is the right tool for adding people, algorithm migration, and format upgrades.
-- Fast rewrap is not retroactive revocation. A removed recipient who kept a copy of the old file still knows the file key. Deep rewrap re-encrypts the payload under a fresh key and is the right tool when someone must actually lose access.
+- Fast rewrap rotates access without decrypting or re-encrypting the payload or materializing payload plaintext. It still copies ciphertext to a replacement file. It is the right tool for adding people, algorithm migration, and format upgrades.
+- Fast rewrap is not revocation. A removed recipient who kept a copy of the old file still knows the file key. Deep rewrap re-encrypts the replacement payload under a fresh key, so a removed recipient cannot use an old slot to open the replacement. It cannot invalidate copies already held by that recipient.
 
 ## What it does not protect against
 
@@ -33,9 +33,9 @@ Format v2 uses the LUKS keyslot model: one random file key, wrapped once per rec
 | HKDF-SHA-256 | crypto/hkdf | RFC 5869 |
 | HMAC-SHA-256 | crypto/hmac | RFC 2104 |
 | Argon2id | golang.org/x/crypto | RFC 9106 |
-| X-Wing expansion and combiner | this repo, internal/xwing | draft-connolly-cfrg-xwing-kem-10 |
+| X-Wing expansion and combiner | this repository, `xwing` | draft-connolly-cfrg-xwing-kem-10 |
 
-The X-Wing code is validated against the draft's Appendix C test vectors on every CI run. The header MAC and STREAM payload constructions follow age; the keyslot model follows LUKS. Nothing in this project is a novel primitive or a novel protocol.
+The X-Wing code is validated against the draft's Appendix C test vectors on every CI run. The header MAC and STREAM payload constructions are based on age, and the keyslot model is inspired by LUKS. Sindook's composition and file format have not received an independent audit.
 
 One deliberate deviation: the draft's Decapsulate uses raw RFC 7748 X25519, which returns an all-zero output for low-order inputs. crypto/ecdh rejects that case with an error, so sindook treats such ciphertexts as invalid. Honest senders never produce them.
 

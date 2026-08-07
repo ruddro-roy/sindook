@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -274,6 +275,9 @@ func TestBinaryHelp(t *testing.T) {
 		t.Skip("skipping binary build in -short mode")
 	}
 	bin := filepath.Join(t.TempDir(), "sindook")
+	if runtime.GOOS == "windows" {
+		bin += ".exe"
+	}
 	if out, err := exec.Command("go", "build", "-o", bin, ".").CombinedOutput(); err != nil {
 		t.Fatalf("build: %v\n%s", err, out)
 	}

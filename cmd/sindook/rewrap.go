@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -16,13 +17,14 @@ const usageRewrap = `usage: sindook rewrap (-i IDENTITY | -p | -passfile FILE)
                       [-new-passphrase | -new-passfile FILE]
                       [-deep] [-o OUT] [-f] FILE...
 
-Replace the key slots of sealed files. By default only the header is
-rewritten: rotation costs the same for a kilobyte or a terabyte, and
-plaintext never exists anywhere. Fast mode does not retroactively revoke
-someone who kept a copy of the old file; -deep re-encrypts the payload
-under a fresh key and does. Files are rewritten in place atomically unless
--o is given. Rotating a whole directory of files in one run is the
-intended use.
+Replace the key slots of sealed files. By default fast mode preserves the
+payload ciphertext without decrypting or re-encrypting it, then copies that
+ciphertext to a replacement file with a fresh header. Fast mode does not
+revoke someone who kept a copy of the old file. -deep creates a replacement
+with a fresh file key, so removed recipients cannot open that replacement
+using the old file key. Files are staged beside their original path and
+replaced only after a successful write unless -o is given. Rotating a whole
+directory of files in one run is the intended use.
 
 flags:
   -i IDENTITY         identity that opens the files today
@@ -110,17 +112,40 @@ func rewrapStream(w io.Writer, r io.Reader, id *xwing.PrivateKey, pass []byte, o
 	return aw.Close()
 }
 
-// rewrapInPlace writes the rewrapped file next to the original and renames
-// it over the original only after a complete, successful write.
+// rewrapInPlace stages the rewrapped file next to the original and replaces
+// the original only after a complete, successful write.
 func rewrapInPlace(path string, id *xwing.PrivateKey, pass []byte, opts box.SealOptions, deep bool) error {
+	pathInfo, err := os.Lstat(path)
+	if err != nil {
+		return err
+	}
+	if pathInfo.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("sindook: refusing to rewrap symbolic link %s", path)
+	}
+	if !pathInfo.Mode().IsRegular() {
+		return fmt.Errorf("sindook: refusing to rewrap non-regular file %s", path)
+	}
+
 	in, err := os.Open(path)
 	if err != nil {
 		return err
 	}
-	defer in.Close()
+	inputOpen := true
+	closeInput := func() error {
+		if !inputOpen {
+			return nil
+		}
+		inputOpen = false
+		return in.Close()
+	}
+	defer closeInput()
+
 	info, err := in.Stat()
 	if err != nil {
 		return err
+	}
+	if !os.SameFile(pathInfo, info) {
+		return fmt.Errorf("sindook: input changed while preparing rewrap %s", path)
 	}
 	tmp, err := os.CreateTemp(filepath.Dir(path), ".sindook-rewrap-*")
 	if err != nil {
@@ -135,6 +160,10 @@ func rewrapInPlace(path string, id *xwing.PrivateKey, pass []byte, opts box.Seal
 		cleanup()
 		return err
 	}
+	if err := closeInput(); err != nil {
+		cleanup()
+		return err
+	}
 	if err := tmp.Chmod(info.Mode().Perm()); err != nil {
 		cleanup()
 		return err
@@ -143,5 +172,5 @@ func rewrapInPlace(path string, id *xwing.PrivateKey, pass []byte, opts box.Seal
 		cleanup()
 		return err
 	}
-	return os.Rename(tmp.Name(), path)
+	return replaceStaged(tmp.Name(), path)
 }

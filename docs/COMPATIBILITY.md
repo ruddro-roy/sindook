@@ -2,7 +2,7 @@
 
 ## Sealed files
 
-Every file sealed by a released version of sindook opens in every later release. Golden fixtures for each format version are committed to the test suite and checked on every CI run, so a change that breaks old files cannot merge. Format evolution is additive: new slot types and versions extend the header, readers skip slot types they do not know, and existing files are never rewritten except by an explicit rewrap.
+Sindook's compatibility policy is to keep files sealed by released versions readable in later releases. Golden fixtures for the supported format versions are committed to the test suite and checked in CI. A format change must preserve those fixtures or provide a documented migration path. Format evolution is additive: new slot types and versions extend the header, readers skip slot types they do not know, and existing files are never rewritten except by an explicit rewrap.
 
 ## CLI
 
@@ -14,4 +14,4 @@ Within a major version, existing commands, flags, and exit codes keep their mean
 
 ## Releases
 
-From v0.4.0 on, every tag is a signed release carrying an SBOM, a cosign keyless signature over the checksums, and SLSA build provenance. The latest release receives fixes; there is no LTS branch yet.
+From v0.4.0 onward, releases include an SBOM, a Sigstore keyless signature over the checksums, and GitHub build provenance. The latest release receives fixes; there is no LTS branch yet.

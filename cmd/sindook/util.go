@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -39,7 +40,9 @@ func openInput(arg string) (r io.ReadCloser, name string, size int64, err error)
 }
 
 // withOutput creates path (refusing to clobber without force), runs fn, and
-// removes the partial file if fn fails. binaryGuard refuses to stream
+// removes a partial new file if fn fails. With -f, it stages output beside an
+// existing destination and replaces it only after a successful close, so a
+// failed operation never destroys the previous file. binaryGuard refuses to stream
 // ciphertext onto an interactive terminal.
 func withOutput(path string, force, binaryGuard bool, fn func(io.Writer) error) error {
 	if path == "-" {
@@ -48,37 +51,89 @@ func withOutput(path string, force, binaryGuard bool, fn func(io.Writer) error) 
 		}
 		return fn(os.Stdout)
 	}
-	flags := os.O_WRONLY | os.O_CREATE | os.O_EXCL
-	if force {
-		flags = os.O_WRONLY | os.O_CREATE | os.O_TRUNC
+	if !force {
+		f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+		if err != nil {
+			return err
+		}
+		if err := fn(f); err != nil {
+			f.Close()
+			os.Remove(path)
+			return err
+		}
+		return f.Close()
 	}
-	f, err := os.OpenFile(path, flags, 0o644)
+
+	return writeOutputStaged(path, 0o600, fn)
+}
+
+// writeOutputStaged replaces a regular output only after fn completes.
+// The replacement always receives perm so plaintext and ciphertext outputs do
+// not inherit broad permissions from an older destination.
+func writeOutputStaged(path string, perm os.FileMode, fn func(io.Writer) error) error {
+	if info, err := os.Lstat(path); err == nil {
+		if info.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("sindook: refusing to overwrite symbolic link %s", path)
+		}
+		if !info.Mode().IsRegular() {
+			return fmt.Errorf("sindook: refusing to overwrite non-regular file %s", path)
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+
+	f, err := os.CreateTemp(filepath.Dir(path), ".sindook-output-*")
 	if err != nil {
+		return err
+	}
+	cleanup := func() {
+		f.Close()
+		os.Remove(f.Name())
+	}
+	if err := f.Chmod(perm); err != nil {
+		cleanup()
 		return err
 	}
 	if err := fn(f); err != nil {
-		f.Close()
-		os.Remove(path)
+		cleanup()
 		return err
 	}
-	return f.Close()
+	if err := f.Close(); err != nil {
+		os.Remove(f.Name())
+		return err
+	}
+	return replaceStaged(f.Name(), path)
+}
+
+// replaceStaged replaces path with a closed staged file. If replacement fails,
+// it removes the staged file so a failed operation does not leave a second
+// copy of sensitive output beside the original.
+func replaceStaged(stagedPath, path string) error {
+	if err := os.Rename(stagedPath, path); err != nil {
+		os.Remove(stagedPath)
+		return err
+	}
+	return nil
 }
 
 func writeFileNew(path string, data []byte, perm os.FileMode, force bool) error {
-	flags := os.O_WRONLY | os.O_CREATE | os.O_EXCL
-	if force {
-		flags = os.O_WRONLY | os.O_CREATE | os.O_TRUNC
+	if !force {
+		f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, perm)
+		if err != nil {
+			return err
+		}
+		if _, err := f.Write(data); err != nil {
+			f.Close()
+			os.Remove(path)
+			return err
+		}
+		return f.Close()
 	}
-	f, err := os.OpenFile(path, flags, perm)
-	if err != nil {
+
+	return writeOutputStaged(path, perm, func(w io.Writer) error {
+		_, err := w.Write(data)
 		return err
-	}
-	if _, err := f.Write(data); err != nil {
-		f.Close()
-		os.Remove(path)
-		return err
-	}
-	return f.Close()
+	})
 }
 
 // limitedWriter fails once more than n bytes are written, bounding the

@@ -1,0 +1,25 @@
+name: Feature request
+description: Propose a user-facing improvement with its security and compatibility impact.
+title: "feature: "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: Describe the user problem, not only a preferred implementation.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+    validations:
+      required: true
+  - type: textarea
+    id: security
+    attributes:
+      label: Security and compatibility considerations
+      description: State whether the change affects keys, ciphertext format, metadata, or existing files.
+    validations:
+      required: true
