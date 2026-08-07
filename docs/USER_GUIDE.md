@@ -65,7 +65,7 @@ A passphrase can be combined with recipients as a recovery path:
 sindook seal -r personal.key.pub -p archive.tar
 ```
 
-A `-passfile` reads only the first line of a file. On POSIX systems, keep that file readable only by its owner, for example with `chmod 600 recovery.pass`.
+A `-passfile` reads only the first line of a file. On POSIX systems, keep that file readable only by its owner, for example with `chmod 600 recovery.pass`. On Windows, restrict the file with an appropriate ACL.
 
 ## Check a backup before you need it
 
