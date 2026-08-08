@@ -8,14 +8,14 @@ Security fixes are made against the latest released version and the current `mai
 
 ## Reporting a vulnerability
 
-Send a short report to roy@ruddro.com with:
+Submit a short report through [GitHub's private vulnerability reporting](https://github.com/ruddro-roy/sindook/security/advisories/new) with:
 
 - the affected Sindook version and operating system;
 - a clear description of the security impact;
 - reproducible steps using synthetic data where possible;
 - any proposed mitigation.
 
-Do not include private keys, passphrases, real plaintext, or unreleased exploit details in a public issue. If encrypted transfer is needed, ask for a secure channel in the initial report. Reports are handled privately and response times are best effort.
+Do not include private keys, passphrases, real plaintext, or unreleased exploit details in a public issue. If encrypted transfer is needed, ask for a secure channel in the private report. Reports are handled privately and response times are best effort.
 
 Please allow time to investigate and coordinate a fix before public disclosure. The project will credit reporters who want attribution after a fix is available.
 
