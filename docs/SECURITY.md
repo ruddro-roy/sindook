@@ -55,4 +55,4 @@ One deliberate deviation: the draft's Decapsulate uses raw RFC 7748 X25519, whic
 
 ## Reporting
 
-Mail roy@ruddro.com.
+Use [GitHub's private vulnerability reporting](https://github.com/ruddro-roy/sindook/security/advisories/new). Do not disclose security-sensitive details in a public issue.
