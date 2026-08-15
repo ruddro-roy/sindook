@@ -1,6 +1,6 @@
 module github.com/ruddro-roy/sindook
 
-go 1.26
+go 1.26.6
 
 require (
 	golang.org/x/crypto v0.54.0
