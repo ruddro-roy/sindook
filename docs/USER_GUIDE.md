@@ -238,12 +238,52 @@ status:
 | Code | Meaning |
 | --- | --- |
 | `0` | success |
-| `1` | command failure (I/O error, malformed input, validation, or authentication failure) |
-| `2` | command-selection or flag-parsing usage error |
+| `1` | operational failure (I/O error, malformed input, validation, or payload corruption) |
+| `2` | usage error (unknown command, bad flag, missing operand, malformed credential on the command line) |
+| `3` | authentication failure (wrong identity or passphrase, missing credential, or header tampering — `ErrWrongKey`, `ErrNeedIdentity`, `ErrNeedPassphrase`, `ErrHeaderTampered`); split from code `1` in v0.6.0 |
 
-Batch commands check every file even if an earlier one fails and exit
-non-zero if any did. Treat exit codes and `-json` output as the stable
-scripting interface; human-readable text is not one.
+Before v0.6.0, authentication failures exited with `1`. Batch commands check every file even if an earlier one fails and exit non-zero if any did (joined usage+authentication errors prefer `2`). Treat exit codes and `-json` output as the stable scripting interface; human-readable text is not one.
+
+## Troubleshooting
+
+### `sindook doctor` reports a memory-lock warning
+
+`sindook doctor` runs `memguard.LockAll()` and reports:
+
+- `ok` on Linux/FreeBSD/Windows when pages were locked, `ok` on macOS where `mlockall` is not reachable from pure Go (hardware full-disk encryption is the mitigation).
+- `warning` on Linux/FreeBSD when `RLIMIT_MEMLOCK` is too low or privileges are insufficient. Remediation: `ulimit -l unlimited` (per-shell) or raise the limit in `/etc/security/limits.conf` or the systemd unit with `LimitMEMLOCK=infinity`.
+
+### CI OOM: `cannot allocate 67108864-byte block`
+
+On GitHub Actions `ubuntu-latest`, `RLIMIT_MEMLOCK` is ~8 MiB. Locking future mappings (`MCL_FUTURE`) would mark every new heap page `VM_LOCKED`, so the next 64 MiB Argon2id allocation (RFC 9106 parameters 64 MiB) hits the limit and the Go runtime aborts:
+
+```
+runtime: out of memory: cannot allocate 67108864-byte block (45088768 in use)
+fatal error: out of memory
+```
+
+From v0.6.0, Sindook checks the limit first: if `RLIMIT_MEMLOCK` is below 96 MiB it uses only `MCL_CURRENT`, which locks the existing pages and avoids pinning every future allocation. This prevents the OOM while still protecting the current working set. No action is needed for normal CI runs; if you raise the limit intentionally, the full `MCL_CURRENT|MCL_FUTURE|MCL_ONFAULT` chain is tried again.
+
+If you see the OOM in your own runners, raise the limit before testing:
+
+```sh
+ulimit -l unlimited   # or LimitMEMLOCK=infinity in systemd
+go test -race ./...
+```
+
+Verify the fix with:
+
+```sh
+sindook doctor        # should show [ok] memory lock or a warning with remediation
+sindook selftest      # 3 checks: x-wing vectors, round trip, tamper detection
+```
+
+If `doctor` still shows a warning and you cannot raise the limit, the process keeps running without locked memory; protect the host with full-disk encryption and restrict swap.
+
+### Other diagnostics
+
+- Run `sindook doctor -json` for machine-readable health, `sindook doctor -check-version` to compare against the latest GitHub release.
+- Run `sindook selftest` after any unusual runtime failure; it exercises the exact X-Wing draft-10 vectors compiled into the binary.
 
 ## Get help
 

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"os"
@@ -10,6 +11,10 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/ruddro-roy/sindook/internal/box"
+	"github.com/ruddro-roy/sindook/internal/memguard"
 )
 
 // The suite drives the real cmd* entry points with temp files; passphrases
@@ -355,16 +360,62 @@ func TestVerifyCorruptedFile(t *testing.T) {
 // TestBinaryHelp exercises the built binary itself: global help, command
 // help, version, the unknown-command path, and the scriptable exit codes
 // with their behaviors.
+//
+// Robustness notes (regression for ubuntu OOM with memguard mlockall):
+//   - The test must NOT be run with t.Parallel(): it builds a binary and
+//     fixtures on the local filesystem. The suite already isolates
+//     SINDOOK_CONFIG_DIR via t.Setenv; this test also forces an isolated
+//     config directory for all child processes so host state cannot leak.
+//   - go build and each binary invocation are wrapped in context timeouts
+//     to survive slow /tmp on CI.
+//   - The build has a single retry with backoff for transient filesystem
+//     races.
+//   - Passfiles are created with 0600 and are wiped/removed after use to
+//     avoid leaving secrets on disk longer than needed. t.TempDir already
+//     guarantees cleanup, but explicit wipe reduces exposure window.
+//   - Fixture sealing and each exit-code assertion use CommandContext so a
+//     hung binary (e.g. regressed memguard MCL_FUTURE OOM) cannot hang the
+//     whole suite indefinitely.
 func TestBinaryHelp(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping binary build in -short mode")
 	}
-	bin := filepath.Join(t.TempDir(), "sindook")
+	// Isolate child-process configuration. t.Setenv gives per-test isolation
+	// for the current process; we also make the directory explicit so the
+	// built binary observes the same isolated root.
+	isolatedConfig := filepath.Join(t.TempDir(), "sindook-config")
+	if err := os.MkdirAll(isolatedConfig, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("SINDOOK_CONFIG_DIR", isolatedConfig)
+
+	binDir := t.TempDir()
+	bin := filepath.Join(binDir, "sindook")
 	if runtime.GOOS == "windows" {
 		bin += ".exe"
 	}
-	if out, err := exec.Command("go", "build", "-o", bin, ".").CombinedOutput(); err != nil {
-		t.Fatalf("build: %v\n%s", err, out)
+	// Build the binary with timeout + one retry for flaky /tmp.
+	var buildOut []byte
+	var buildErr error
+	for attempt := 1; attempt <= 2; attempt++ {
+		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+		cmd := exec.CommandContext(ctx, "go", "build", "-o", bin, ".")
+		cmd.Env = os.Environ()
+		buildOut, buildErr = cmd.CombinedOutput()
+		cancel()
+		if buildErr == nil {
+			break
+		}
+		if ctx.Err() == context.DeadlineExceeded {
+			t.Fatalf("go build timed out (attempt %d): %v\n%s", attempt, buildErr, buildOut)
+		}
+		if attempt == 2 {
+			t.Fatalf("build: %v\n%s", buildErr, buildOut)
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	if _, err := os.Stat(bin); err != nil {
+		t.Fatalf("binary not present after build: %v\n%s", err, buildOut)
 	}
 
 	// Exit-code fixtures: a passphrase-sealed file and a wrong passfile.
@@ -377,14 +428,52 @@ func TestBinaryHelp(t *testing.T) {
 	if err := os.WriteFile(passfile, []byte("correct horse\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	if runtime.GOOS != "windows" {
+		if fi, err := os.Stat(passfile); err == nil && fi.Mode().Perm() != 0o600 {
+			t.Fatalf("passfile mode = %#o, want 0600", fi.Mode().Perm())
+		}
+	}
+	// Wipe passfile before TempDir cleanup to reduce secret lifetime.
+	defer func() {
+		_ = os.WriteFile(passfile, bytes.Repeat([]byte{0}, 32), 0o600)
+		_ = os.Remove(passfile)
+	}()
 	wrong := filepath.Join(dir, "wrong")
 	if err := os.WriteFile(wrong, []byte("battery staple\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if out, err := exec.Command(bin, "seal", "-passfile", passfile, plain).CombinedOutput(); err != nil {
-		t.Fatalf("fixture seal: %v\n%s", err, out)
+	if runtime.GOOS != "windows" {
+		if fi, err := os.Stat(wrong); err == nil && fi.Mode().Perm() != 0o600 {
+			t.Fatalf("wrong passfile mode = %#o, want 0600", fi.Mode().Perm())
+		}
 	}
+	defer func() {
+		_ = os.WriteFile(wrong, bytes.Repeat([]byte{0}, 32), 0o600)
+		_ = os.Remove(wrong)
+	}()
+
+	// Use isolated env for all subprocesses; inherit parent env (already
+	// contains the isolated SINDOOK_CONFIG_DIR from t.Setenv).
+	env := os.Environ()
+	// Seal the fixture via the binary with a timeout so a memguard OOM
+	// regression (previously triggered on ubuntu with low RLIMIT_MEMLOCK)
+	// fails fast instead of hanging.
+	func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		cmd := exec.CommandContext(ctx, bin, "seal", "-passfile", passfile, plain)
+		cmd.Env = env
+		if out, err := cmd.CombinedOutput(); err != nil {
+			if ctx.Err() == context.DeadlineExceeded {
+				t.Fatalf("fixture seal timed out (possible memguard OOM): %v\n%s", err, out)
+			}
+			t.Fatalf("fixture seal: %v\n%s", err, out)
+		}
+	}()
 	sealed := plain + ext
+	if _, err := os.Stat(sealed); err != nil {
+		t.Fatalf("sealed fixture not created: %v", err)
+	}
 
 	for _, tc := range []struct {
 		args     []string
@@ -406,7 +495,15 @@ func TestBinaryHelp(t *testing.T) {
 		{[]string{"open", "-passfile", wrong, "-o", filepath.Join(dir, "out.txt"), sealed}, 3, "cannot unwrap file key"},
 		{[]string{"open", "-passfile", wrong, filepath.Join(dir, "missing.sindook")}, 1, ""},
 	} {
-		out, err := exec.Command(bin, tc.args...).CombinedOutput()
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		cmd := exec.CommandContext(ctx, bin, tc.args...)
+		cmd.Env = env
+		out, err := cmd.CombinedOutput()
+		cancel()
+		if ctx.Err() == context.DeadlineExceeded {
+			t.Errorf("%v: timed out after 15s (binary hung)\n%s", tc.args, out)
+			continue
+		}
 		code := 0
 		if ee, ok := err.(*exec.ExitError); ok {
 			code = ee.ExitCode()
@@ -419,6 +516,71 @@ func TestBinaryHelp(t *testing.T) {
 		if !strings.Contains(string(out), tc.want) {
 			t.Errorf("%v: output missing %q:\n%s", tc.args, tc.want, out)
 		}
+	}
+}
+
+// TestMemguardLowLimitStillSeals ensures that even after memguard.LockAll
+// the process can still seal with the production Argon2id parameters
+// (64 MiB). This directly guards against the ubuntu CI OOM where
+// LockAll with MCL_FUTURE under a low RLIMIT_MEMLOCK caused the next
+// 64 MiB argon2 allocation to fault as VM_LOCKED and abort the runtime.
+func TestMemguardLowLimitStillSeals(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping heavy argon2 in -short mode")
+	}
+	if err := memguard.LockAll(); err != nil {
+		t.Logf("memguard.LockAll: %v (continuing to verify sealing still works)", err)
+	}
+	t.Logf("memguard status: %s", memguard.Status())
+
+	pass := []byte("correct horse battery staple")
+	plain := []byte("low-limit payload for memguard regression")
+	var sealed bytes.Buffer
+
+	done := make(chan error, 1)
+	go func() {
+		done <- box.SealPassphrase(&sealed, bytes.NewReader(plain), pass, box.DefaultArgon2id)
+	}()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("SealPassphrase after LockAll failed: %v (regression: locking should not cause OOM)", err)
+		}
+	case <-time.After(45 * time.Second):
+		t.Fatal("SealPassphrase after LockAll timed out (possible memguard OOM/deadlock)")
+	}
+
+	var out bytes.Buffer
+	if err := box.Open(&out, bytes.NewReader(sealed.Bytes()), nil, pass); err != nil {
+		t.Fatalf("Open after LockAll failed: %v", err)
+	}
+	if !bytes.Equal(out.Bytes(), plain) {
+		t.Fatalf("round-trip mismatch after LockAll: got %q want %q", out.Bytes(), plain)
+	}
+}
+
+// TestExitCodeDoesNotMisclassifyOOM verifies that the exitCode mapper does
+// not treat a fatal OOM/panic-like error as a usage error (exit 2). OOM
+// from memguard/argon2 must surface as operational failure (exit 1), not as
+// a misleading "usage" diagnostic.
+func TestExitCodeDoesNotMisclassifyOOM(t *testing.T) {
+	// Simulate an OOM-like plain error (as the runtime would for a failed
+	// large allocation) and a wrapped version. Neither should be mistaken
+	// for ErrWrongKey / ErrNeed* (exit 3) nor for usageError (exit 2).
+	oom := errors.New("fatal error: runtime: out of memory: cannot allocate 67108864-byte block")
+	if got := exitCode(oom); got != 1 {
+		t.Fatalf("exitCode(OOM) = %d, want 1 (operational)", got)
+	}
+	wrapped := errors.Join(oom, box.ErrWrongKey)
+	// Auth error present, but OOM is also present; usage still beats auth,
+	// but plain OOM+auth without usage should be auth (3). Ensure we don't
+	// accidentally map OOM to usage.
+	if got := exitCode(wrapped); got != 3 {
+		t.Fatalf("exitCode(OOM + auth) = %d, want 3", got)
+	}
+	joinedUsage := errors.Join(oom, usagef("bad flag"))
+	if got := exitCode(joinedUsage); got != 2 {
+		t.Fatalf("exitCode(OOM + usage) = %d, want 2", got)
 	}
 }
 

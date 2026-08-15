@@ -167,11 +167,13 @@ verification, streams, and recovery.
 | Code | Meaning |
 | --- | --- |
 | `0` | success |
-| `1` | command failure (I/O error, malformed input, validation, or authentication failure) |
-| `2` | command-selection or flag-parsing usage error |
+| `1` | operational failure (I/O error, malformed input, validation, or payload corruption) |
+| `2` | usage error (unknown command or flag, missing operand, malformed credential on the command line) |
+| `3` | authentication failure (wrong identity or passphrase, missing credential, header tampering — added in 0.6.0, previously `1`) |
 
 Machine-facing output (`-json`, exit codes) is stable within a major version;
-see [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md).
+see [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md) for the 0.6.0 `3` split and
+[docs/USER_GUIDE.md#troubleshooting](docs/USER_GUIDE.md#troubleshooting) for memory-lock diagnostics.
 
 ## Design
 

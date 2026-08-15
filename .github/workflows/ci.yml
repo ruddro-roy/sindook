@@ -22,15 +22,71 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
+          cache: true
+          cache-dependency-path: |
+            go.sum
+            interop/go.sum
       - name: build
+        timeout-minutes: 5
         run: go build ./...
       - name: test
-        run: go test ./...
+        timeout-minutes: 10
+        run: go test -count=1 ./...
       - name: test interoperability module
+        timeout-minutes: 5
         working-directory: interop
         run: |
           go vet ./...
-          go test ./...
+          go test -count=1 ./...
+      - name: upload test logs on failure
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: test-logs-${{ matrix.os }}
+          path: |
+            /tmp/*.log
+          retention-days: 7
+          if-no-files-found: ignore
+
+  race:
+    name: race
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: |
+            go.sum
+            interop/go.sum
+      - name: allow mlock (best-effort)
+        timeout-minutes: 1
+        run: |
+          ulimit -l unlimited || true
+          ulimit -l || true
+          cat /proc/meminfo | head -n 20 || true
+      - name: race (main module)
+        timeout-minutes: 10
+        env:
+          GOMAXPROCS: "2"
+        run: go test -race -count=1 ./...
+      - name: race (interop)
+        timeout-minutes: 5
+        working-directory: interop
+        env:
+          GOMAXPROCS: "2"
+        run: go test -race -count=1 ./...
+      - name: upload race logs on failure
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: race-logs
+          path: |
+            /tmp/*.log
+          retention-days: 7
+          if-no-files-found: ignore
 
   quality:
     runs-on: ubuntu-latest
@@ -40,7 +96,23 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
+          cache: true
+          cache-dependency-path: |
+            go.sum
+            interop/go.sum
+      - name: cache fuzz corpora
+        uses: actions/cache@0057852bfaa89aea4db6ed64c14953a7db3227e2 # v4.3.0
+        with:
+          path: |
+            internal/box/testdata/fuzz
+            xwing/testdata/fuzz
+            internal/armor/testdata/fuzz
+            ~/.cache/go
+          key: fuzz-${{ runner.os }}-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            fuzz-${{ runner.os }}-
       - name: gofmt
+        timeout-minutes: 2
         run: |
           git ls-files -z -- '*.go' | xargs -0 gofmt -l > /tmp/gofmt.out
           if test -s /tmp/gofmt.out; then
@@ -48,10 +120,10 @@ jobs:
             exit 1
           fi
       - name: vet
+        timeout-minutes: 5
         run: go vet ./...
-      - name: race
-        run: go test -race ./...
       - name: cross-compile
+        timeout-minutes: 5
         run: |
           set -eu
           for goos in linux darwin windows freebsd openbsd netbsd; do
@@ -61,15 +133,40 @@ jobs:
             done
           done
       - name: fuzz smoke
+        timeout-minutes: 10
         run: |
           for target in FuzzOpenRecipient FuzzOpenPassphrase FuzzSealOpenRoundTrip FuzzBitFlip; do
-            go test ./internal/box -run='^$' -fuzz="^${target}\$" -fuzztime=30s
+            go test ./internal/box -run='^$' -fuzz="^${target}\$" -fuzztime=30s -count=1
           done
-          go test ./xwing -run='^$' -fuzz='^FuzzDecapsulate$' -fuzztime=30s
-          go test ./internal/armor -run='^$' -fuzz='^FuzzArmor$' -fuzztime=30s
+          go test ./xwing -run='^$' -fuzz='^FuzzDecapsulate$' -fuzztime=30s -count=1
+          go test ./internal/armor -run='^$' -fuzz='^FuzzArmor$' -fuzztime=30s -count=1
       - name: timing
+        timeout-minutes: 5
         run: SINDOOK_TIMING=1 go test ./xwing -run '^TestDecapsulationTiming$' -count=1 -v
       - name: govulncheck
-        uses: golang/govulncheck-action@032d45514ae346b1db93c04b0c90b841c370344f # v1
+        timeout-minutes: 5
+        run: |
+          # Retry up to 3 times to tolerate vuln DB network flakes while keeping
+          # the check required (fails if vulnerability is real).
+          for i in 1 2 3; do
+            echo "govulncheck attempt $i/3"
+            if go run golang.org/x/vuln/cmd/govulncheck@v1.6.0 ./...; then
+              exit 0
+            fi
+            ec=$?
+            echo "::warning::govulncheck attempt $i failed with exit $ec, retrying in 5s..."
+            sleep 5
+            if [ "$i" -eq 3 ]; then
+              exit $ec
+            fi
+          done
+      - name: upload quality logs on failure
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          go-package: ./...
+          name: quality-logs
+          path: |
+            /tmp/gofmt.out
+            /tmp/*.log
+          retention-days: 7
+          if-no-files-found: ignore

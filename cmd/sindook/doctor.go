@@ -12,7 +12,11 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/term"
+
+	"github.com/ruddro-roy/sindook/internal/box"
 	"github.com/ruddro-roy/sindook/internal/memguard"
+	"github.com/ruddro-roy/sindook/xwing"
 )
 
 const usageDoctor = `usage: sindook doctor [-json] [-check-version]
@@ -77,14 +81,21 @@ func cmdDoctor(args []string) error {
 	report := doctorReport{
 		Version:  version,
 		Platform: runtime.GOOS + "/" + runtime.GOARCH,
-		Checks:   make([]doctorCheck, 0, 5),
+		Checks:   make([]doctorCheck, 0, 6),
 	}
 	if err := memguard.LockAll(); errors.Is(err, memguard.ErrUnsupported) {
-		report.add("memory lock", "ok", "memory locking is not available on this platform; key material is not protected against swapping", "")
+		report.add("memory lock", "ok", "memory locking is not supported on this platform via pure Go; key material may be written to swap (use full-disk encryption)", "")
 	} else if err != nil {
-		report.add("memory lock", "warning", err.Error(), "raise the RLIMIT_MEMLOCK limit (or run with more privileges) so key material cannot be written to swap")
+		report.add("memory lock", "warning", err.Error(), "raise RLIMIT_MEMLOCK with 'ulimit -l unlimited' or run with more privileges so key material is not written to swap (see docs/USER_GUIDE.md#troubleshooting)")
 	} else {
 		report.add("memory lock", "ok", "key material is kept in locked memory where the OS allows it", "")
+	}
+	if err := xwing.SelfTest(); err != nil {
+		report.add("cryptographic self-test", "error", "x-wing self-test failed: "+err.Error(), "reinstall sindook from a verified release and run 'sindook selftest' for details")
+	} else if err := box.SelfTest(); err != nil {
+		report.add("cryptographic self-test", "error", "box self-test failed: "+err.Error(), "reinstall sindook from a verified release and run 'sindook selftest' for details")
+	} else {
+		report.add("cryptographic self-test", "ok", "x-wing draft-10 vectors and box round-trip verified", "")
 	}
 	if exe, err := os.Executable(); err != nil {
 		report.add("executable", "warning", "could not determine the running binary: "+err.Error(), "run sindook from a normal installed path")
@@ -120,12 +131,20 @@ func cmdDoctor(args []string) error {
 	} else {
 		fmt.Printf("Sindook %s on %s\n", report.Version, report.Platform)
 		for _, check := range report.Checks {
-			fmt.Printf("[%s] %s: %s\n", check.Status, check.Name, check.Detail)
+			fmt.Printf("[%s] %s: %s\n", doctorStatusLabel(check.Status), check.Name, check.Detail)
 			if check.Remediation != "" {
-				fmt.Printf("  %s\n", check.Remediation)
+				fmt.Printf("  -> %s\n", check.Remediation)
 			}
 		}
-		fmt.Printf("Summary: %d error(s), %d warning(s)\n", report.Errors, report.Warnings)
+		summary := fmt.Sprintf("Summary: %d error(s), %d warning(s)", report.Errors, report.Warnings)
+		if isDoctorTerminal() && report.Errors > 0 {
+			summary = "\x1b[31m" + summary + "\x1b[0m"
+		} else if isDoctorTerminal() && report.Warnings > 0 {
+			summary = "\x1b[33m" + summary + "\x1b[0m"
+		} else if isDoctorTerminal() {
+			summary = "\x1b[32m" + summary + "\x1b[0m"
+		}
+		fmt.Println(summary)
 	}
 	if report.Errors > 0 {
 		return fmt.Errorf("sindook: doctor found %d problem(s)", report.Errors)
@@ -277,4 +296,24 @@ func parseReleaseParts(value string) ([3]int, bool) {
 		parts[i] = n
 	}
 	return parts, true
+}
+
+func isDoctorTerminal() bool {
+	return term.IsTerminal(int(os.Stdout.Fd()))
+}
+
+func doctorStatusLabel(status string) string {
+	if !isDoctorTerminal() {
+		return status
+	}
+	switch status {
+	case "ok":
+		return "\x1b[32m" + status + "\x1b[0m"
+	case "warning":
+		return "\x1b[33m" + status + "\x1b[0m"
+	case "error":
+		return "\x1b[31m" + status + "\x1b[0m"
+	default:
+		return status
+	}
 }

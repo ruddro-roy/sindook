@@ -3,6 +3,10 @@ package main
 import (
 	"fmt"
 	"os"
+	"runtime"
+	"time"
+
+	"golang.org/x/term"
 
 	"github.com/ruddro-roy/sindook/internal/box"
 	"github.com/ruddro-roy/sindook/xwing"
@@ -24,16 +28,37 @@ func cmdSelftest(args []string) error {
 		return usagef("selftest takes no arguments")
 	}
 
+	isTTY := term.IsTerminal(int(os.Stdout.Fd()))
+	green := func(s string) string {
+		if isTTY {
+			return "\x1b[32m" + s + "\x1b[0m"
+		}
+		return s
+	}
+	red := func(s string) string {
+		if isTTY {
+			return "\x1b[31m" + s + "\x1b[0m"
+		}
+		return s
+	}
+	fmt.Printf("Sindook %s selftest on %s/%s\n", version, runtime.GOOS, runtime.GOARCH)
+	start := time.Now()
+
 	if err := xwing.SelfTest(); err != nil {
+		fmt.Printf("[%s] x-wing draft-10 vectors: %v\n", red("FAIL"), err)
 		fmt.Fprintf(os.Stderr, "sindook selftest: FAILED: %v\n", err)
 		return err
 	}
-	fmt.Println("x-wing draft-10 vectors: ok")
+	fmt.Printf("[%s] x-wing draft-10 vectors: ok\n", green("ok"))
+
+	t0 := time.Now()
 	if err := box.SelfTest(); err != nil {
+		fmt.Printf("[%s] box self-test: %v (elapsed %s)\n", red("FAIL"), err, time.Since(t0).Truncate(time.Millisecond))
 		fmt.Fprintf(os.Stderr, "sindook selftest: FAILED: %v\n", err)
 		return err
 	}
-	fmt.Println("box round trip: ok")
-	fmt.Println("box tamper detection: ok")
+	fmt.Printf("[%s] box round trip: ok\n", green("ok"))
+	fmt.Printf("[%s] box tamper detection: ok\n", green("ok"))
+	fmt.Printf("selftest: all 3 checks passed (%s)\n", time.Since(start).Truncate(time.Millisecond))
 	return nil
 }

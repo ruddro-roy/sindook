@@ -8,9 +8,11 @@ import (
 	"io"
 	"os"
 	"testing"
+	"time"
 
 	"golang.org/x/crypto/chacha20poly1305"
 
+	"github.com/ruddro-roy/sindook/internal/memguard"
 	"github.com/ruddro-roy/sindook/xwing"
 )
 
@@ -358,5 +360,76 @@ func TestSlotLimits(t *testing.T) {
 		Argon:       testArgon,
 	}); err == nil {
 		t.Fatal("passphrase slot cap not enforced")
+	}
+}
+
+// TestSealAfterLockAll verifies that calling memguard.LockAll does not break
+// subsequent passphrase sealing. This guards the MCL_FUTURE OOM regression
+// where a low RLIMIT_MEMLOCK caused the next 64 MiB argon2 allocation to
+// be locked and abort the runtime.
+func TestSealAfterLockAll(t *testing.T) {
+	if err := memguard.LockAll(); err != nil {
+		t.Logf("memguard.LockAll: %v", err)
+	}
+	t.Logf("memguard status: %s", memguard.Status())
+
+	// Prepare keys outside the timeout goroutine so we don't call testing.T
+	// helpers from another goroutine.
+	k := newIdentity(t)
+	plain := []byte("after LockAll payload")
+	pass := []byte("test-pass")
+
+	done := make(chan error, 1)
+	go func() {
+		// Passphrase-only round-trip.
+		var sealed bytes.Buffer
+		if err := Seal(&sealed, bytes.NewReader(plain), SealOptions{Passphrases: [][]byte{pass}, Argon: testArgon}); err != nil {
+			done <- err
+			return
+		}
+		blob := sealed.Bytes()
+		var out bytes.Buffer
+		if err := Open(&out, bytes.NewReader(blob), nil, pass); err != nil {
+			done <- err
+			return
+		}
+		if !bytes.Equal(out.Bytes(), plain) {
+			done <- errors.New("passphrase round-trip mismatch after LockAll")
+			return
+		}
+		// Mixed slots.
+		sealed.Reset()
+		if err := Seal(&sealed, bytes.NewReader(plain), SealOptions{Recipients: [][]byte{k.PublicKey()}, Passphrases: [][]byte{pass}, Argon: testArgon}); err != nil {
+			done <- err
+			return
+		}
+		blob = sealed.Bytes()
+		out.Reset()
+		if err := Open(&out, bytes.NewReader(blob), k, nil); err != nil {
+			done <- err
+			return
+		}
+		if !bytes.Equal(out.Bytes(), plain) {
+			done <- errors.New("mixed recipient round-trip mismatch after LockAll")
+			return
+		}
+		out.Reset()
+		if err := Open(&out, bytes.NewReader(blob), nil, pass); err != nil {
+			done <- err
+			return
+		}
+		if !bytes.Equal(out.Bytes(), plain) {
+			done <- errors.New("mixed passphrase round-trip mismatch after LockAll")
+			return
+		}
+		done <- nil
+	}()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("seal after LockAll failed: %v", err)
+		}
+	case <-time.After(20 * time.Second):
+		t.Fatal("seal after LockAll timed out (possible memguard deadlock/OOM)")
 	}
 }
