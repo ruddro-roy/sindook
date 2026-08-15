@@ -1,0 +1,22 @@
+.TH SINDOOK-PUBKEY 1 "2026-08-15" "sindook 0.5.0" "User Commands"
+.SH NAME
+sindook-pubkey \- print the public key of an identity
+.SH SYNOPSIS
+.B sindook pubkey
+[\fB\-identity-passfile\fP \fIFILE\fP] [\fIFILE\fP]
+.SH DESCRIPTION
+Prints the public key of an identity. \fIFILE\fP defaults to stdin.
+A passphrase-protected identity prompts for its passphrase unless
+\fB\-identity-passfile\fP is supplied.
+.SH OPTIONS
+.TP
+\fB\-identity-passfile\fP \fIFILE\fP
+read a protected identity's passphrase from \fIFILE\fP
+.SH EXAMPLES
+.nf
+sindook pubkey my.key
+.fi
+.SH SEE ALSO
+.BR sindook (1),
+.BR sindook-keygen (1),
+.BR sindook-seal (1)

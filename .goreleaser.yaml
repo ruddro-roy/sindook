@@ -16,7 +16,8 @@ builds:
     mod_timestamp: "{{ .CommitTimestamp }}"
 
 archives:
-  - formats: [tar.gz]
+  - name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    formats: [tar.gz]
     format_overrides:
       - goos: windows
         formats: [zip]
@@ -24,6 +25,23 @@ archives:
       - LICENSE
       - README.md
       - docs/*
+
+nfpms:
+  - id: packages
+    package_name: sindook
+    file_name_template: "sindook_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    vendor: Ruddro Roy
+    homepage: https://github.com/ruddro-roy/sindook
+    maintainer: Ruddro Roy <roy@ruddro.com>
+    description: Hybrid post-quantum file encryption with key rotation built in. Sindook is the Bengali word for a strongbox.
+    license: Apache-2.0
+    formats: [deb, rpm, apk]
+    bindir: /usr/bin
+    contents:
+      - src: LICENSE
+        dst: /usr/share/doc/sindook/LICENSE
+        file_info:
+          mode: 0644
 
 checksum:
   name_template: checksums.txt

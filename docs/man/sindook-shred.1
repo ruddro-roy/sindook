@@ -1,0 +1,32 @@
+.TH SINDOOK-SHRED 1 "2026-08-15" "sindook 0.5.0" "User Commands"
+.SH NAME
+sindook-shred \- overwrite files before deleting them
+.SH SYNOPSIS
+.B sindook shred
+[\fB\-n\fP \fIPASSES\fP] \fIFILE\fP...
+.SH DESCRIPTION
+Overwrites each \fIFILE\fP with pseudorandom data and then unlinks it,
+so the plaintext is not recoverable from the deleted file through
+ordinary means. Refuses symbolic links and non-regular files.
+.SH OPTIONS
+.TP
+\fB\-n\fP \fIPASSES\fP
+number of overwrite passes to perform before unlinking
+.SH CAVEATS
+Shredding a file cannot destroy every trace of it. On SSDs, wear
+leveling and the flash translation layer mean the overwritten blocks
+are not necessarily the ones holding prior data; TRIM may make
+recovery impossible or may leave a prior copy until the controller
+decides otherwise. Journaling filesystems, copy-on-write filesystems
+(APFS, ZFS, btrfs), snapshots, backups, and cloud sync folders may
+retain earlier copies that shred cannot reach. Shredding a file also
+does not destroy copies an attacker already made. For stronger
+guarantees, use full-disk encryption before data is written, or
+physically destroy the medium.
+.SH EXAMPLES
+.nf
+sindook shred old-plaintext.txt
+sindook shred -n 3 *.docx
+.fi
+.SH SEE ALSO
+.BR sindook (1)

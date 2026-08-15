@@ -9,6 +9,10 @@ This is a direction for the project, not a promise of dates or completed feature
 - Recipient and passphrase slots, armor, inspection, fast rewrap, and deep rewrap.
 - Unit, race, fuzz-smoke, interoperability, vulnerability, and release checks in CI.
 - Signed release checksums, SBOMs, and build provenance for releases from v0.4.0 onward.
+- Native Linux/macOS/Windows installer scripts, PowerShell completion, and
+  portable CLI-side glob expansion.
+- Opt-in default identity paths and named public-recipient contacts without
+  placing private identities or passphrases in application configuration.
 
 ## Before a 1.0 decision
 

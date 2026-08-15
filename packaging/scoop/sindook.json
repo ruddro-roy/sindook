@@ -1,0 +1,39 @@
+{
+    "_comment": "Scoop manifest for Sindook. The hash values below are placeholders: fill them at release time (see docs/RELEASING.md) with the SHA-256 entries from checksums.txt of the published release. autoupdate keeps url/hash current afterward.",
+    "version": "0.5.0",
+    "description": "Hybrid post-quantum file encryption (X-Wing: X25519 + ML-KEM-768) with key rotation built in.",
+    "homepage": "https://github.com/ruddro-roy/sindook",
+    "license": "Apache-2.0",
+    "architecture": {
+        "64bit": {
+            "url": "https://github.com/ruddro-roy/sindook/releases/download/v0.5.0/sindook_0.5.0_windows_amd64.zip",
+            "hash": "sha256:FILL_ME_AT_RELEASE_TIME_amd64"
+        },
+        "arm64": {
+            "url": "https://github.com/ruddro-roy/sindook/releases/download/v0.5.0/sindook_0.5.0_windows_arm64.zip",
+            "hash": "sha256:FILL_ME_AT_RELEASE_TIME_arm64"
+        }
+    },
+    "bin": "sindook.exe",
+    "checkver": {
+        "github": "https://github.com/ruddro-roy/sindook"
+    },
+    "autoupdate": {
+        "architecture": {
+            "64bit": {
+                "url": "https://github.com/ruddro-roy/sindook/releases/download/v$version/sindook_$version_windows_amd64.zip",
+                "hash": {
+                    "url": "https://github.com/ruddro-roy/sindook/releases/download/v$version/checksums.txt",
+                    "regex": "$sha256\\s+\\*?sindook_$version_windows_amd64\\.zip"
+                }
+            },
+            "arm64": {
+                "url": "https://github.com/ruddro-roy/sindook/releases/download/v$version/sindook_$version_windows_arm64.zip",
+                "hash": {
+                    "url": "https://github.com/ruddro-roy/sindook/releases/download/v$version/checksums.txt",
+                    "regex": "$sha256\\s+\\*?sindook_$version_windows_arm64\\.zip"
+                }
+            }
+        }
+    }
+}

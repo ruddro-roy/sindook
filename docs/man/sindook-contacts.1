@@ -1,0 +1,39 @@
+.TH SINDOOK-CONTACTS 1 "2026-08-15" "sindook 0.5.0" "User Commands"
+.SH NAME
+sindook-contacts \- save and use named recipient public keys
+.SH SYNOPSIS
+.B sindook contacts
+[\fBlist\fP [\fB\-json\fP] | \fBadd\fP [\fB\-f\fP] \fINAME\fP
+\fIPUBLIC_KEY_OR_FILE\fP | \fBshow\fP \fINAME\fP | \fBremove\fP \fINAME\fP]
+.SH DESCRIPTION
+Saves shareable recipient public keys under portable,
+case-insensitive names. Use a saved contact anywhere a recipient is
+accepted, for example \fB\-r @alice\fP. The configuration file
+contains public keys and an optional default identity path only; it
+never contains private keys or passphrases.
+.SH SUBCOMMANDS
+.TP
+.B list
+list saved contacts (with \fB\-json\fP: one JSON array)
+.TP
+\fBadd\fP [\fB\-f\fP] \fINAME\fP \fIPUBLIC_KEY_OR_FILE\fP
+save a public key under \fINAME\fP; \fB\-f\fP replaces an existing
+contact
+.TP
+\fBshow\fP \fINAME\fP
+print one saved public key
+.TP
+\fBremove\fP \fINAME\fP
+delete a saved contact
+.SH EXAMPLES
+.nf
+sindook contacts add alice alice.key.pub
+sindook contacts add finance-team team.keys
+sindook contacts list
+sindook seal -r @alice report.pdf
+sindook contacts remove alice
+.fi
+.SH SEE ALSO
+.BR sindook (1),
+.BR sindook-paths (1),
+.BR sindook-seal (1)

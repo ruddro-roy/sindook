@@ -1,0 +1,29 @@
+.TH SINDOOK-INSPECT 1 "2026-08-15" "sindook 0.5.0" "User Commands"
+.SH NAME
+sindook-inspect \- show sealed-file metadata, no credentials needed
+.SH SYNOPSIS
+.B sindook inspect
+[\fB\-json\fP] [\fB\-glob\fP \fIPATTERN\fP]... [\fIFILE\fP...]
+.SH DESCRIPTION
+Shows the public metadata of sealed files without any credentials:
+format version, key slots, and KDF parameters. This reveals nothing an
+attacker holding the file does not already have. Armored input is
+detected automatically. Slot metadata is covered by the header MAC,
+which only a key holder can verify, so treat the report as a claim
+until the file opens.
+.SH OPTIONS
+.TP
+\fB\-json\fP
+machine-readable output, one JSON array
+.TP
+\fB\-glob\fP \fIPATTERN\fP
+add files matched by a portable filesystem pattern, repeatable
+.SH EXAMPLES
+.nf
+sindook inspect budget.xlsx.sindook
+sindook inspect -json archive.tar.sindook
+.fi
+.SH SEE ALSO
+.BR sindook (1),
+.BR sindook-verify (1),
+.BR sindook-rewrap (1)

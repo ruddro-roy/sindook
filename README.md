@@ -14,9 +14,50 @@ Each sealed file carries key slots, following the LUKS model. `rewrap` can rotat
 
 ## Install
 
-    go install github.com/ruddro-roy/sindook/cmd/sindook@latest
+Tagged releases ship native, CGO-free binaries for Linux, macOS, and Windows
+on both amd64 and arm64. Every archive includes a checksum, SBOM, Sigstore
+bundle, and GitHub build provenance.
 
-Requires Go 1.26 or newer. A minimal distroless container image builds from the included Dockerfile.
+Install from source on any supported operating system:
+
+    go install github.com/ruddro-roy/sindook/cmd/sindook@latest
+    sindook version
+
+Or install a verified release binary without Go. From a checked-out Sindook
+source tree, run one of the included user-local installers:
+
+    # macOS or Linux
+    ./scripts/install.sh
+
+    # Windows PowerShell
+    .\scripts\install.ps1
+
+The installers choose the current OS and architecture, verify the matching
+entry in `checksums.txt`, install without administrator privileges, and print
+the PATH action if one is needed. Pass `--version vX.Y.Z` to select a release
+and `--yes` to skip prompts. Release assets are named
+`sindook_X.Y.Z_linux_amd64.tar.gz`, `sindook_X.Y.Z_darwin_arm64.tar.gz`, and
+`sindook_X.Y.Z_windows_amd64.zip` (with the appropriate OS/architecture).
+
+### Install matrix
+
+| Method | How |
+| --- | --- |
+| Go toolchain | `go install github.com/ruddro-roy/sindook/cmd/sindook@latest` (Go 1.26+) |
+| macOS / Linux installer | `curl -fsSLO https://raw.githubusercontent.com/ruddro-roy/sindook/main/scripts/install.sh && sh install.sh` |
+| Windows installer | Download `scripts/install.ps1` from the repository and run it in PowerShell |
+| Homebrew | `brew install --formula packaging/homebrew/sindook.rb` from this checkout, or publish `packaging/homebrew` as a tap |
+| Scoop | `scoop install .\packaging\scoop\sindook.json` from this checkout, or publish `packaging/scoop` as a bucket |
+| winget | `winget install ruddro-roy.sindook` once `packaging/winget/manifests/r/ruddro-roy/sindook/0.6.0/sindook.yaml` is published to winget-pkgs |
+| Docker | `docker build .` from this checkout; the image is minimal distroless and runs `sindook` as its entrypoint |
+| Source | `git clone` and `go build ./cmd/sindook` |
+
+The Homebrew, Scoop, and winget manifests are prepared for the next release
+with `sha256` placeholders that must be filled when the release is published;
+see [docs/RELEASING.md](docs/RELEASING.md).
+
+Requires Go 1.26 or newer when installing from source. A minimal distroless
+container image builds from the included Dockerfile.
 
 Release binaries for Linux, macOS, and Windows carry an SBOM, a cosign keyless signature, and GitHub build provenance. Verify before use:
 
@@ -27,7 +68,28 @@ Release binaries for Linux, macOS, and Windows carry an SBOM, a cosign keyless s
 
 Compatibility policy and tested file-format support: [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md).
 
+On Windows, an unsigned release can trigger SmartScreen. Verify the archive
+before overriding a platform warning; macOS Gatekeeper/notarization support
+will require a future Developer ID signing process.
+
 ## Use
+
+### First-time setup and named contacts
+
+Create an identity at an explicit location and make it the opt-in default:
+
+    sindook init -o personal.key -p
+    sindook seal -r @default report.pdf
+    sindook open -i @default report.pdf.sindook
+
+Save public recipient keys once, then use names instead of remembering file
+paths. The portable per-user config contains only public contacts and the
+path to the chosen default identity, never a private key or passphrase.
+
+    sindook contacts add alice alice.key.pub
+    sindook contacts list
+    sindook seal -r @alice project-plan.pdf
+    sindook paths
 
 Generate an identity:
 
@@ -60,6 +122,12 @@ Streams work, every command takes many files, and `-R` reads a recipient list (c
     tar cz src | sindook seal -r my.key.pub -o src.tgz.sindook
     sindook rewrap -i old.key -R team.keys backups/*.sindook
 
+For the same batch behavior in Windows `cmd.exe` and PowerShell, or when a
+shell does not expand a wildcard, use Sindook's portable `-glob` flag:
+
+    sindook verify -i @default -glob "backups/*.sindook"
+    sindook seal -r @alice -glob "reports/*.pdf"
+
 Armor produces ASCII that survives email and copy-paste; open detects it automatically:
 
     sindook seal -r alice.pub -a -o - secret.txt | pbcopy
@@ -69,7 +137,41 @@ Prove backups still open without writing plaintext anywhere, and read a sealed f
     sindook verify -i my.key backups/*.sindook
     sindook inspect -json archive.tar.sindook
 
-For scripts, `-passfile` replaces the interactive prompt. `keygen -p` seals the identity file itself under a passphrase, so a stolen key file alone opens nothing. `sindook completion bash|zsh|fish` prints shell completions, and `sindook help <command>` shows flags and examples. The [user guide](docs/USER_GUIDE.md) covers safe output behavior, backup verification, streams, and recovery.
+Run a fast in-process sanity check after a fresh install or unusual runtime
+failure. It validates the published X-Wing vectors plus a sealed-file round
+trip and tamper rejection; it is not a replacement for the full test suite:
+
+    sindook selftest
+
+Overwrite plaintext files before deleting them, and diagnose an installation:
+
+    sindook shred -n 3 old-plaintext.txt
+    sindook doctor -check-version
+
+`shred` overwrites before unlink, but it cannot defeat SSD wear leveling,
+filesystem journaling, copy-on-write snapshots, backups, or copies an
+attacker already made. `doctor` checks the installation and configuration
+and, with `-check-version`, looks for a newer release. See
+[docs/USER_GUIDE.md](docs/USER_GUIDE.md) for details and caveats.
+
+For scripts, `-passfile` replaces the payload prompt and
+`-identity-passfile` replaces a protected identity prompt. `keygen -p` seals
+the identity file itself under a passphrase, so a stolen key file alone opens
+nothing. `sindook completion bash|zsh|fish|powershell` prints shell
+completions, and `sindook help <command>` shows flags and examples. The
+[user guide](docs/USER_GUIDE.md) covers safe output behavior, backup
+verification, streams, and recovery.
+
+## Exit codes
+
+| Code | Meaning |
+| --- | --- |
+| `0` | success |
+| `1` | command failure (I/O error, malformed input, validation, or authentication failure) |
+| `2` | command-selection or flag-parsing usage error |
+
+Machine-facing output (`-json`, exit codes) is stable within a major version;
+see [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md).
 
 ## Design
 

@@ -1,0 +1,47 @@
+.TH SINDOOK-OPEN 1 "2026-08-15" "sindook 0.5.0" "User Commands"
+.SH NAME
+sindook-open \- decrypt sealed files
+.SH SYNOPSIS
+.B sindook open
+(\fB\-i\fP \fIIDENTITY\fP | \fB\-p\fP | \fB\-passfile\fP \fIFILE\fP)
+[\fB\-identity-passfile\fP \fIFILE\fP] [\fB\-glob\fP \fIPATTERN\fP]...
+[\fB\-o\fP \fIOUT\fP] [\fB\-f\fP] [\fIFILE\fP...]
+.SH DESCRIPTION
+Decrypts sealed files. Armored input is detected automatically. Each
+\fIFILE\fP\fB.sindook\fP becomes \fIFILE\fP; with no \fIFILE\fP,
+stdin is opened to stdout. Opening to a file path removes a partial
+new output on failure.
+.SH OPTIONS
+.TP
+\fB\-i\fP \fIIDENTITY\fP
+identity file (prompts if passphrase-protected); use \fB@default\fP
+for the identity selected by
+.BR sindook-init (1)
+.TP
+\fB\-p\fP
+open with a passphrase, prompted at the terminal
+.TP
+\fB\-passfile\fP \fIFILE\fP
+read the passphrase from \fIFILE\fP instead
+.TP
+\fB\-identity-passfile\fP \fIFILE\fP
+read a protected identity's passphrase from \fIFILE\fP
+.TP
+\fB\-glob\fP \fIPATTERN\fP
+add files matched by a portable filesystem pattern, repeatable
+.TP
+\fB\-o\fP \fIOUT\fP
+output path, \fB\-\fP for stdout (single \fIFILE\fP only)
+.TP
+\fB\-f\fP
+overwrite existing output
+.SH EXAMPLES
+.nf
+sindook open -i my.key report.pdf.sindook
+sindook open -p notes.txt.sindook
+sindook open -i my.key -o - src.tgz.sindook | tar xz
+.fi
+.SH SEE ALSO
+.BR sindook (1),
+.BR sindook-seal (1),
+.BR sindook-verify (1)

@@ -1,0 +1,33 @@
+.TH SINDOOK-KEYGEN 1 "2026-08-15" "sindook 0.5.0" "User Commands"
+.SH NAME
+sindook-keygen \- create a sindook identity
+.SH SYNOPSIS
+.B sindook keygen
+[\fB\-o\fP \fIFILE\fP] [\fB\-p\fP] [\fB\-passfile\fP \fIFILE\fP] [\fB\-f\fP]
+.SH DESCRIPTION
+Creates a new identity: \fIFILE\fP (secret, mode 0600) and
+\fIFILE\fP\fB.pub\fP (shareable). With \fB\-p\fP the identity file
+itself is sealed under a passphrase, so a stolen key file alone opens
+nothing; commands using the identity then prompt for that passphrase.
+.SH OPTIONS
+.TP
+\fB\-o\fP \fIFILE\fP
+identity file to write (default \fBsindook.key\fP)
+.TP
+\fB\-p\fP
+protect the identity file with a passphrase
+.TP
+\fB\-passfile\fP \fIFILE\fP
+read the protection passphrase from \fIFILE\fP, implies \fB\-p\fP
+.TP
+\fB\-f\fP
+overwrite existing files
+.SH EXAMPLES
+.nf
+sindook keygen -o my.key
+sindook keygen -o my.key -p
+.fi
+.SH SEE ALSO
+.BR sindook (1),
+.BR sindook-init (1),
+.BR sindook-pubkey (1)

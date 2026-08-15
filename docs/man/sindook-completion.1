@@ -1,0 +1,17 @@
+.TH SINDOOK-COMPLETION 1 "2026-08-15" "sindook 0.5.0" "User Commands"
+.SH NAME
+sindook-completion \- print a shell completion script
+.SH SYNOPSIS
+.B sindook completion
+(bash | zsh | fish | powershell)
+.SH DESCRIPTION
+Prints a shell completion script to stdout.
+.SH INSTALLATION
+.nf
+bash:  sindook completion bash >> ~/.bash_completion
+zsh:   sindook completion zsh > "${fpath[1]}/_sindook"
+fish:  sindook completion fish > ~/.config/fish/completions/sindook.fish
+pwsh:  sindook completion powershell | Add-Content $PROFILE
+.fi
+.SH SEE ALSO
+.BR sindook (1)

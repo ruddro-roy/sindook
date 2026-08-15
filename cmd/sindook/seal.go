@@ -9,7 +9,7 @@ import (
 )
 
 const usageSeal = `usage: sindook seal [-r RECIPIENT]... [-R FILE]... [-p | -passfile FILE]
-                    [-a] [-o OUT] [-f] [FILE...]
+                    [-glob PATTERN]... [-a] [-o OUT] [-f] [FILE...]
 
 Seal files to recipients and/or a passphrase. Every recipient and
 passphrase becomes a key slot; any one of them opens the file. Each FILE
@@ -21,6 +21,7 @@ flags:
                   (blank lines and # comments are skipped)
   -p              add a passphrase slot, prompted at the terminal
   -passfile FILE  read the passphrase from FILE instead, implies -p
+  -glob PATTERN    add files matched by a portable filesystem pattern
   -a              armor: ASCII output that survives email and copy-paste
   -o OUT          output path, - for stdout (single FILE only)
   -f              overwrite existing output
@@ -29,6 +30,7 @@ examples:
   sindook seal -r my.key.pub report.pdf
   sindook seal -r alice.pub -r bob.pub -p budget.xlsx
   sindook seal -R team.keys *.log
+  sindook seal -r alice.pub -glob "reports/*.pdf"
   tar cz src | sindook seal -r my.key.pub -o src.tgz.sindook
   sindook seal -r alice.pub -a -o - secret.txt | pbcopy
 `
@@ -38,21 +40,27 @@ func cmdSeal(args []string) error {
 	var recipients, recipientFiles multiFlag
 	fs.Var(&recipients, "r", "")
 	fs.Var(&recipientFiles, "R", "")
+	var globs multiFlag
+	fs.Var(&globs, "glob", "")
 	usePass := fs.Bool("p", false, "")
 	passfile := fs.String("passfile", "", "")
 	armored := fs.Bool("a", false, "")
 	out := fs.String("o", "", "")
 	force := fs.Bool("f", false, "")
-	fs.Parse(args)
+	parseInterspersedFlags(fs, args)
 
-	inputs := fs.Args()
+	inputs, err := expandInputs(fs.Args(), globs)
+	if err != nil {
+		return err
+	}
 	if *out != "" && len(inputs) > 1 {
-		return errors.New("sindook: -o cannot be combined with multiple input files")
+		return usagef("-o cannot be combined with multiple input files")
 	}
 	opts, err := buildSealOptions(recipients, recipientFiles, *usePass, *passfile, "passphrase")
 	if err != nil {
 		return err
 	}
+	defer wipePassphrases(&opts)
 	if len(inputs) == 0 {
 		inputs = []string{"-"}
 	}

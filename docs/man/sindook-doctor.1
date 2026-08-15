@@ -1,0 +1,31 @@
+.TH SINDOOK-DOCTOR 1 "2026-08-15" "sindook 0.5.0" "User Commands"
+.SH NAME
+sindook-doctor \- diagnose the sindook installation
+.SH SYNOPSIS
+.B sindook doctor
+[\fB\-json\fP] [\fB\-check-version\fP]
+.SH DESCRIPTION
+Checks the health of the local installation: the running binary, the
+portable configuration directory and its contents, and platform
+properties the commands rely on. Prints findings and remediation
+advice. Useful as a first step after installation or before filing a
+bug report.
+.SH OPTIONS
+.TP
+\fB\-json\fP
+machine-readable output, one JSON object
+.TP
+\fB\-check-version\fP
+also compare the running version against the latest GitHub release
+and report when an update is available
+.SH EXIT STATUS
+.TP
+.B 0
+no problems found
+.TP
+.B 1
+one or more problems found, or the check could not complete
+.SH SEE ALSO
+.BR sindook (1),
+.BR sindook-paths (1),
+.BR sindook-selftest (1)

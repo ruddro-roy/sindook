@@ -18,6 +18,8 @@ import (
 	"crypto/rand"
 	"crypto/sha3"
 	"errors"
+
+	"github.com/ruddro-roy/sindook/internal/memguard"
 )
 
 const (
@@ -45,6 +47,7 @@ func NewPrivateKey(seed []byte) (*PrivateKey, error) {
 		return nil, errors.New("xwing: seed must be 32 bytes")
 	}
 	expanded := sha3.SumSHAKE256(seed, 96)
+	defer memguard.Wipe(expanded[:])
 	dkM, err := mlkem.NewDecapsulationKey768(expanded[0:64])
 	if err != nil {
 		return nil, err
@@ -62,6 +65,7 @@ func NewPrivateKey(seed []byte) (*PrivateKey, error) {
 // GenerateKey creates a private key from 32 bytes of system randomness.
 func GenerateKey() (*PrivateKey, error) {
 	seed := make([]byte, SeedSize)
+	defer memguard.Wipe(seed)
 	if _, err := rand.Read(seed); err != nil {
 		return nil, err
 	}
@@ -76,6 +80,12 @@ func (k *PrivateKey) Seed() []byte {
 // PublicKey returns a copy of the 1216-byte encapsulation key (pk_M || pk_X).
 func (k *PrivateKey) PublicKey() []byte {
 	return append([]byte(nil), k.pub...)
+}
+
+// Wipe zeroes the secret seed in place. After Wipe the key is unusable and
+// must not be used again.
+func (k *PrivateKey) Wipe() {
+	memguard.Wipe(k.seed[:])
 }
 
 func combiner(ssM, ssX, ctX, pkX []byte) []byte {
@@ -113,6 +123,8 @@ func Encapsulate(pub []byte) (ss, ct []byte, err error) {
 	ssM, ctM := ekM.Encapsulate()
 	ctX := ekX.PublicKey().Bytes()
 	ss = combiner(ssM, ssX, ctX, pub[1184:])
+	memguard.Wipe(ssM)
+	memguard.Wipe(ssX)
 	ct = append(ctM, ctX...)
 	if len(ct) != CiphertextSize {
 		return nil, nil, errors.New("xwing: internal ciphertext length mismatch")
@@ -138,7 +150,11 @@ func (k *PrivateKey) Decapsulate(ct []byte) ([]byte, error) {
 	}
 	ssX, err := k.skX.ECDH(ctX)
 	if err != nil {
+		memguard.Wipe(ssM)
 		return nil, err
 	}
-	return combiner(ssM, ssX, ctX.Bytes(), k.pub[1184:]), nil
+	ret := combiner(ssM, ssX, ctX.Bytes(), k.pub[1184:])
+	memguard.Wipe(ssM)
+	memguard.Wipe(ssX)
+	return ret, nil
 }

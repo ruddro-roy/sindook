@@ -7,12 +7,14 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"runtime"
 	"strings"
 	"time"
 
 	"golang.org/x/term"
 
 	"github.com/ruddro-roy/sindook/internal/box"
+	"github.com/ruddro-roy/sindook/internal/memguard"
 	"github.com/ruddro-roy/sindook/xwing"
 )
 
@@ -40,36 +42,13 @@ func cmdKeygen(args []string) error {
 	protect := fs.Bool("p", false, "")
 	passfile := fs.String("passfile", "", "")
 	force := fs.Bool("f", false, "")
-	fs.Parse(args)
+	parseInterspersedFlags(fs, args)
 	if fs.NArg() != 0 {
-		return errors.New("sindook: keygen takes no positional arguments")
+		return usagef("keygen takes no positional arguments")
 	}
 	*protect = *protect || *passfile != ""
-
-	k, err := xwing.GenerateKey()
+	pub, err := createIdentity(*out, *protect, *passfile, *force)
 	if err != nil {
-		return err
-	}
-	pub := pkPrefix + base64.RawStdEncoding.EncodeToString(k.PublicKey())
-	id := []byte(fmt.Sprintf("# sindook identity, created %s\n# public: %s\n%s%s\n",
-		time.Now().UTC().Format(time.RFC3339), pub,
-		skPrefix, base64.RawStdEncoding.EncodeToString(k.Seed())))
-
-	if *protect {
-		pass, err := getPassphrase(*passfile, "identity passphrase", true)
-		if err != nil {
-			return err
-		}
-		var sealed bytes.Buffer
-		if err := box.SealPassphrase(&sealed, bytes.NewReader(id), pass, box.DefaultArgon2id); err != nil {
-			return err
-		}
-		id = sealed.Bytes()
-	}
-	if err := writeFileNew(*out, id, 0o600, *force); err != nil {
-		return err
-	}
-	if err := writeFileNew(*out+".pub", []byte(pub+"\n"), 0o644, *force); err != nil {
 		return err
 	}
 	fmt.Fprintf(os.Stderr, "identity: %s\npublic key: %s\n", *out, *out+".pub")
@@ -77,10 +56,66 @@ func cmdKeygen(args []string) error {
 	return nil
 }
 
-const usagePubkey = `usage: sindook pubkey [FILE]
+// createIdentity writes a matching private/public identity pair. It checks
+// both targets before writing either one, which avoids leaving an orphan
+// private identity when a pre-existing .pub file blocks key generation.
+func createIdentity(out string, protect bool, passfile string, force bool) (string, error) {
+	if err := preflightOutput(out, force); err != nil {
+		return "", err
+	}
+	if err := preflightOutput(out+".pub", force); err != nil {
+		return "", err
+	}
+
+	k, err := xwing.GenerateKey()
+	if err != nil {
+		return "", err
+	}
+	defer k.Wipe()
+	pub := pkPrefix + base64.RawStdEncoding.EncodeToString(k.PublicKey())
+	seed := k.Seed()
+	id := []byte(fmt.Sprintf("# sindook identity, created %s\n# public: %s\n%s%s\n",
+		time.Now().UTC().Format(time.RFC3339), pub,
+		skPrefix, base64.RawStdEncoding.EncodeToString(seed)))
+	memguard.Wipe(seed)
+	defer memguard.Wipe(id)
+
+	if protect {
+		pass, err := getPassphrase(passfile, "identity passphrase", true)
+		if err != nil {
+			return "", err
+		}
+		defer memguard.Wipe(pass)
+		var sealed bytes.Buffer
+		if err := box.SealPassphrase(&sealed, bytes.NewReader(id), pass, box.DefaultArgon2id); err != nil {
+			return "", err
+		}
+		id = sealed.Bytes()
+	}
+	if err := writeFileNew(out, id, 0o600, force); err != nil {
+		return "", err
+	}
+	if err := applyPathACL(out, false); err != nil {
+		return "", fmt.Errorf("sindook: created identity %s but could not restrict its access control list: %w", out, err)
+	}
+	if err := writeFileNew(out+".pub", []byte(pub+"\n"), 0o644, force); err != nil {
+		// Without -f, this command created the private file after both paths
+		// had been preflighted. Remove it so a failed pair is never presented
+		// as a usable setup. With -f an older private key may have existed, so
+		// preserving it is safer than deleting it on an unexpected race.
+		if !force {
+			_ = os.Remove(out)
+		}
+		return "", err
+	}
+	return pub, nil
+}
+
+const usagePubkey = `usage: sindook pubkey [-identity-passfile FILE] [FILE]
 
 Print the public key of an identity. FILE defaults to stdin. A
-passphrase-protected identity prompts for its passphrase.
+passphrase-protected identity prompts for its passphrase unless
+-identity-passfile is supplied.
 
 example:
   sindook pubkey my.key
@@ -88,14 +123,16 @@ example:
 
 func cmdPubkey(args []string) error {
 	fs := newFlagSet("pubkey", usagePubkey)
-	fs.Parse(args)
+	identityPassfile := fs.String("identity-passfile", "", "")
+	parseInterspersedFlags(fs, args)
 	if fs.NArg() > 1 {
-		return errors.New("sindook: pubkey takes at most one identity file")
+		return usagef("pubkey takes at most one identity file")
 	}
-	id, err := loadIdentity(fs.Arg(0))
+	id, err := loadIdentityWithPassfile(fs.Arg(0), *identityPassfile)
 	if err != nil {
 		return err
 	}
+	defer id.Wipe()
 	fmt.Println(pkPrefix + base64.RawStdEncoding.EncodeToString(id.PublicKey()))
 	return nil
 }
@@ -104,23 +141,50 @@ func cmdPubkey(args []string) error {
 // passphrase-protected identity, recognizable by the sindook magic, is
 // decrypted after prompting at the terminal.
 func loadIdentity(path string) (*xwing.PrivateKey, error) {
+	return loadIdentityWithPassfile(path, "")
+}
+
+func resolveIdentityPath(path string) (string, error) {
+	if path != "@default" {
+		return path, nil
+	}
+	return defaultIdentityPath()
+}
+
+// loadIdentityWithPassfile reads an identity from a file or stdin. An
+// explicit passfile makes protected identities usable in scheduled and piped
+// workflows on every supported operating system.
+func loadIdentityWithPassfile(path, identityPassfile string) (*xwing.PrivateKey, error) {
 	var raw []byte
 	var err error
+	path, err = resolveIdentityPath(path)
+	if err != nil {
+		return nil, err
+	}
 	display := path
 	if path == "" || path == "-" {
 		display = "identity on stdin"
 		raw, err = io.ReadAll(io.LimitReader(os.Stdin, 1<<20))
 	} else {
 		raw, err = os.ReadFile(path)
+		if err == nil {
+			if info, statErr := os.Stat(path); statErr == nil {
+				if warning := warnInsecurePerms(path, info); warning != "" {
+					fmt.Fprintln(os.Stderr, warning)
+				}
+			}
+		}
 	}
 	if err != nil {
 		return nil, err
 	}
+	defer func() { memguard.Wipe(raw) }()
 	if bytes.HasPrefix(raw, []byte("SINDOOK")) {
-		pass, err := promptPassphrase("passphrase for "+display, false)
+		pass, err := getPassphrase(identityPassfile, "passphrase for "+display, false)
 		if err != nil {
 			return nil, err
 		}
+		defer memguard.Wipe(pass)
 		if raw, err = openSealedIdentity(raw, pass); err != nil {
 			return nil, err
 		}
@@ -144,9 +208,12 @@ func parseIdentity(raw []byte, display string) (*xwing.PrivateKey, error) {
 		}
 		seed, err := base64.RawStdEncoding.DecodeString(strings.TrimPrefix(line, skPrefix))
 		if err != nil || len(seed) != xwing.SeedSize {
+			memguard.Wipe(seed)
 			return nil, fmt.Errorf("sindook: malformed identity in %s", display)
 		}
-		return xwing.NewPrivateKey(seed)
+		k, err := xwing.NewPrivateKey(seed)
+		memguard.Wipe(seed)
+		return k, err
 	}
 	return nil, fmt.Errorf("sindook: no %s entry in %s", skPrefix, display)
 }
@@ -154,6 +221,16 @@ func parseIdentity(raw []byte, display string) (*xwing.PrivateKey, error) {
 // loadRecipient accepts a literal public key string, a .pub file, or an
 // identity file (which carries its public key on a "# public:" line).
 func loadRecipient(s string) ([]byte, error) {
+	if s == "@default" || s == "@me" || s == "@self" {
+		path, err := defaultPublicKeyPath()
+		if err != nil {
+			return nil, err
+		}
+		return loadRecipient(path)
+	}
+	if strings.HasPrefix(s, "@") {
+		return loadContact(strings.TrimPrefix(s, "@"))
+	}
 	b64 := ""
 	if strings.HasPrefix(s, pkPrefix) {
 		b64 = strings.TrimPrefix(s, pkPrefix)
@@ -208,7 +285,7 @@ func loadRecipientsFile(path string) ([][]byte, error) {
 func decodeRecipient(b64 string) ([]byte, error) {
 	pub, err := base64.RawStdEncoding.DecodeString(strings.TrimSpace(b64))
 	if err != nil || len(pub) != xwing.PublicKeySize {
-		return nil, errors.New("sindook: malformed recipient public key")
+		return nil, usagef("malformed recipient public key")
 	}
 	return pub, nil
 }
@@ -239,21 +316,27 @@ func buildSealOptions(recipients, recipientFiles []string, withPassphrase bool, 
 		opts.Passphrases = [][]byte{pass}
 	}
 	if len(opts.Recipients) == 0 && len(opts.Passphrases) == 0 {
-		return opts, errors.New("sindook: provide at least one -r recipient, -R file, or -p")
+		return opts, usagef("provide at least one -r recipient, -R file, or -p")
+	}
+	if len(opts.Recipients)+len(opts.Passphrases) > 32 {
+		return opts, usagef("at most 32 key slots per file")
+	}
+	if len(opts.Passphrases) > 4 {
+		return opts, usagef("at most 4 passphrase slots per file")
 	}
 	return opts, nil
 }
 
 // loadCredentials resolves the identity and passphrase used for opening.
-func loadCredentials(idPath string, usePass bool, passfile, passLabel string) (*xwing.PrivateKey, []byte, error) {
+func loadCredentials(idPath string, usePass bool, passfile, identityPassfile, passLabel string) (*xwing.PrivateKey, []byte, error) {
 	usePass = usePass || passfile != ""
 	if idPath == "" && !usePass {
-		return nil, nil, errors.New("sindook: provide -i IDENTITY, -p, or -passfile")
+		return nil, nil, usagef("provide -i IDENTITY, -p, or -passfile")
 	}
 	var id *xwing.PrivateKey
 	if idPath != "" {
 		var err error
-		if id, err = loadIdentity(idPath); err != nil {
+		if id, err = loadIdentityWithPassfile(idPath, identityPassfile); err != nil {
 			return nil, nil, err
 		}
 	}
@@ -277,10 +360,14 @@ func getPassphrase(passfile, label string, confirm bool) ([]byte, error) {
 }
 
 func promptPassphrase(label string, confirm bool) ([]byte, error) {
-	tty, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
+	console := "/dev/tty"
+	if runtime.GOOS == "windows" {
+		console = "CONIN$"
+	}
+	tty, err := os.OpenFile(console, os.O_RDWR, 0)
 	if err != nil {
 		if !term.IsTerminal(int(os.Stdin.Fd())) {
-			return nil, errors.New("sindook: no terminal for the passphrase prompt, use -passfile")
+			return nil, errors.New("sindook: no terminal for the passphrase prompt, use the applicable passfile flag")
 		}
 		tty = os.Stdin
 	} else {
@@ -303,8 +390,11 @@ func promptPassphrase(label string, confirm bool) ([]byte, error) {
 			return nil, err
 		}
 		if !bytes.Equal(p1, p2) {
+			memguard.Wipe(p1)
+			memguard.Wipe(p2)
 			return nil, errors.New("sindook: passphrases do not match")
 		}
+		memguard.Wipe(p2)
 	}
 	return p1, nil
 }

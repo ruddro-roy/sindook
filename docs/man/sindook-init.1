@@ -1,0 +1,44 @@
+.TH SINDOOK-INIT 1 "2026-08-15" "sindook 0.5.0" "User Commands"
+.SH NAME
+sindook-init \- create or select the default sindook identity
+.SH SYNOPSIS
+.B sindook init
+[\fB\-i\fP \fIIDENTITY\fP | \fB\-o\fP \fIFILE\fP] [\fB\-p\fP]
+[\fB\-passfile\fP \fIFILE\fP] [\fB\-identity-passfile\fP \fIFILE\fP]
+[\fB\-f\fP]
+.SH DESCRIPTION
+Creates a first identity at an explicit path, or selects an existing
+one as the default for \fB\-i @default\fP and \fB\-r @default\fP.
+Sindook stores only that path and public contact aliases in its
+per-user configuration; it never copies a private identity or
+passphrase into the configuration directory.
+.SH OPTIONS
+.TP
+\fB\-i\fP \fIIDENTITY\fP
+select an existing identity as the default
+.TP
+\fB\-o\fP \fIFILE\fP
+create a new identity here (default \fBsindook.key\fP)
+.TP
+\fB\-p\fP
+protect a new identity with a passphrase
+.TP
+\fB\-passfile\fP \fIFILE\fP
+read a new identity's protection passphrase from \fIFILE\fP
+.TP
+\fB\-identity-passfile\fP \fIFILE\fP
+read an existing protected identity's passphrase from \fIFILE\fP
+.TP
+\fB\-f\fP
+overwrite a newly-created identity
+.SH EXAMPLES
+.nf
+sindook init -o ~/Documents/sindook-personal.key -p
+sindook init -i ~/Documents/sindook-personal.key
+sindook seal -r @default report.pdf
+sindook open -i @default report.pdf.sindook
+.fi
+.SH SEE ALSO
+.BR sindook (1),
+.BR sindook-keygen (1),
+.BR sindook-paths (1)

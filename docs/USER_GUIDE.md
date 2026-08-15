@@ -11,7 +11,50 @@ go install github.com/ruddro-roy/sindook/cmd/sindook@latest
 sindook version
 ```
 
-Release archives include checksums, an SBOM, a Sigstore bundle for `checksums.txt`, and GitHub build provenance. See the verification commands in the [README](../README.md#install) before trusting a downloaded binary.
+Tagged releases include Linux, macOS, and Windows binaries for amd64 and
+arm64. From a Sindook checkout, the user-local installers choose the matching
+release and verify its SHA-256 entry before copying the binary:
+
+```sh
+# macOS or Linux
+./scripts/install.sh
+```
+
+```powershell
+# Windows PowerShell
+.\scripts\install.ps1
+```
+
+Neither installer requires administrator rights; both print a PATH reminder
+when necessary. Release archives include checksums, an SBOM, a Sigstore bundle
+for `checksums.txt`, and GitHub build provenance. See the verification commands
+in the [README](../README.md#install) before trusting a downloaded binary.
+
+## First-time setup and contacts
+
+`init` creates an identity at an explicit path and remembers that path as the
+opt-in default. It does not copy the identity or a passphrase into the Sindook
+configuration directory:
+
+```sh
+sindook init -o personal.key -p
+sindook seal -r @default report.pdf
+sindook open -i @default report.pdf.sindook
+```
+
+Save another person's public key under a portable contact name, then use
+`@name` anywhere a recipient is accepted:
+
+```sh
+sindook contacts add alice alice.key.pub
+sindook contacts list
+sindook seal -r @alice project-plan.pdf
+```
+
+`sindook paths` shows the platform-specific config location. It follows the
+normal user configuration location for each OS, and `SINDOOK_CONFIG_DIR` can
+override it for a portable installation or an isolated automation run. The
+config contains only public keys and the default identity's path.
 
 ## Create and back up an identity
 
@@ -30,6 +73,14 @@ sindook keygen -o personal.key -p
 
 For non-interactive use, put the passphrase in a file with restrictive permissions and use `-passfile`. Never put a passphrase in a command line, environment variable, shell history, or repository.
 
+`-passfile` supplies a passphrase used for a sealed file. A separately
+protected identity uses `-identity-passfile`:
+
+```sh
+sindook open -i personal.key -identity-passfile identity.pass report.pdf.sindook
+sindook verify -i personal.key -identity-passfile identity.pass backups/archive.sindook
+```
+
 ## Seal a file for a recipient
 
 ```sh
@@ -45,6 +96,11 @@ Multiple recipients can each open the same file:
 ```sh
 sindook seal -r alice.pub -r bob.pub budget.xlsx
 ```
+
+When an identity is selected with `sindook init`, `@default` resolves to its
+public key for sealing and its private identity for `-i @default` on opening,
+verification, and rewrap. It is explicit: a command with no `-i`, `-p`, or
+`-passfile` still fails rather than silently choosing an identity.
 
 A recipient list accepts one `sindookpk1:` public key per line. Blank lines and `#` comments are ignored:
 
@@ -73,6 +129,15 @@ A `-passfile` reads only the first line of a file. On POSIX systems, keep that f
 
 ```sh
 sindook verify -i personal.key backups/*.sindook
+```
+
+POSIX shells normally expand `*`. For Windows `cmd.exe`, PowerShell, and any
+script where you want the CLI itself to expand a filesystem pattern, use the
+repeatable `-glob` flag instead:
+
+```powershell
+sindook verify -i @default -glob "backups/*.sindook"
+sindook seal -r @alice -glob "reports/*.pdf"
 ```
 
 This is the right command for backup checks. `open` streams authenticated chunks. If a file is damaged late in the stream, bytes already emitted are authenticated, but the command still fails because the complete file did not authenticate. When opening to a file path, Sindook removes a partial new output on failure. Do not treat a failed stdout pipeline as a complete file.
@@ -104,6 +169,50 @@ sindook rewrap -i personal.key -r alice.pub -deep archive.tar.sindook
 
 Deep rewrap creates a fresh file key and streams a new payload. Keep the old ciphertext inaccessible if revocation matters.
 
+## Shred plaintext files
+
+`shred` overwrites a file with pseudorandom data and then unlinks it, so the
+plaintext is not recoverable from the deleted file through ordinary means:
+
+```sh
+sindook shred old-plaintext.txt
+sindook shred -n 3 *.docx
+sindook shred -glob "old/*.docx"   # portable to cmd.exe and PowerShell
+```
+
+It does not destroy every trace of a file. On SSDs, wear leveling and the
+flash translation layer decide which physical blocks actually receive the
+overwrites, and TRIM does not run on a schedule you control. Journaling
+filesystems, copy-on-write filesystems (APFS, ZFS, btrfs), snapshots,
+backups, and cloud-sync folders can all retain earlier copies that `shred`
+cannot reach. Shredding a file also cannot destroy copies an attacker
+already made. For stronger guarantees, use full-disk encryption before data
+is written, or destroy the medium.
+
+## Self-test and installation checks
+
+`selftest` runs the X-Wing draft vectors and sealed-file round trips compiled
+into the binary:
+
+```sh
+sindook selftest
+```
+
+It reports pass or fail per check and exits non-zero on any failure. Passing
+it shows the shipped build agrees with the published vectors; it is not a
+security audit and not a substitute for `go test ./...` before a release.
+
+`doctor` checks the health of the installation: the running binary, the
+configuration directory, and the platform properties the commands rely on:
+
+```sh
+sindook doctor
+sindook doctor -check-version   # also compare against the latest release
+sindook doctor -json            # machine-readable output
+```
+
+Run both after a fresh install or before filing a bug report.
+
 ## Streams and safe output handling
 
 ```sh
@@ -111,9 +220,30 @@ tar cz project | sindook seal -r personal.key.pub -o project.tgz.sindook
 sindook open -i personal.key -o - project.tgz.sindook | tar xz
 ```
 
+PowerShell treats pipelines as objects and can change binary data. Use an
+explicit `-o` path for binary streams there, or use `-a` when the output is
+intentionally ASCII armored text.
+
 By default, Sindook refuses to overwrite a destination. Use `-f` only when replacement is intentional. With `-f`, it stages output beside the destination and replaces it only after a successful write; symbolic links and non-regular destinations are refused. On POSIX systems, new sealed and plaintext output files are mode `0600`; public key files are mode `0644`. On Windows, Sindook does not set an owner-only ACL. Access follows Windows and the destination directory's ACL.
 
 Same-directory rename behavior is platform-dependent. Keep backups of important files and use `verify` after a storage migration or rewrap.
+
+## Scripting and exit codes
+
+For non-interactive use, `-passfile` replaces a payload passphrase prompt and
+`-identity-passfile` replaces a protected identity prompt; neither should
+appear in a command line or environment. Commands exit with a machine-checkable
+status:
+
+| Code | Meaning |
+| --- | --- |
+| `0` | success |
+| `1` | command failure (I/O error, malformed input, validation, or authentication failure) |
+| `2` | command-selection or flag-parsing usage error |
+
+Batch commands check every file even if an earlier one fails and exit
+non-zero if any did. Treat exit codes and `-json` output as the stable
+scripting interface; human-readable text is not one.
 
 ## Get help
 
@@ -121,6 +251,12 @@ Same-directory rename behavior is platform-dependent. Keep backups of important 
 sindook help
 sindook help seal
 sindook completion zsh > "${fpath[1]}/_sindook"
+```
+
+PowerShell completion can be loaded for the current profile with:
+
+```powershell
+sindook completion powershell | Add-Content $PROFILE
 ```
 
 For the security boundary, read the [threat model](THREAT_MODEL.md) and [security model](SECURITY.md).

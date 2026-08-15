@@ -15,3 +15,12 @@ Within a major version, existing commands, flags, and exit codes keep their mean
 ## Releases
 
 From v0.4.0 onward, releases include an SBOM, a Sigstore keyless signature over the checksums, and GitHub build provenance. The latest release receives fixes; there is no LTS branch yet.
+
+## Supported operating systems
+
+Official release binaries and CI coverage target current macOS on Intel and
+Apple Silicon, Windows 10/11 on amd64 and arm64, and mainstream Linux on
+amd64 and arm64. The command surface, managed-contact config, `-glob` batch
+selection, installers, and shell completion are designed for those targets.
+Other Go platforms may compile from source but are not a release-support
+promise yet.

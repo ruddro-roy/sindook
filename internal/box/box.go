@@ -22,6 +22,7 @@ import (
 	"golang.org/x/crypto/argon2"
 	"golang.org/x/crypto/chacha20poly1305"
 
+	"github.com/ruddro-roy/sindook/internal/memguard"
 	"github.com/ruddro-roy/sindook/xwing"
 )
 
@@ -134,6 +135,7 @@ func Seal(dst io.Writer, src io.Reader, opts SealOptions) error {
 		return err
 	}
 	fileKey := make([]byte, fileKeySize)
+	defer memguard.Wipe(fileKey)
 	if _, err := rand.Read(fileKey); err != nil {
 		return err
 	}
@@ -148,6 +150,7 @@ func Seal(dst io.Writer, src io.Reader, opts SealOptions) error {
 	if err != nil {
 		return err
 	}
+	defer memguard.Wipe(payloadKey)
 	return sealPayload(dst, src, payloadKey)
 }
 
@@ -220,13 +223,19 @@ func writeHeaderV2(dst io.Writer, fileKey, fileNonce []byte, opts SealOptions) e
 		}
 		wrapKey, err := hkdf.Key(sha256.New, ss, fileNonce, wrapInfoV2, chacha20poly1305.KeySize)
 		if err != nil {
+			memguard.Wipe(ss)
 			return err
 		}
 		wrapped, err := wrapSeal(wrapKey, fileKey, slotAAD(fileNonce, SlotXWing, kemCT))
 		if err != nil {
+			memguard.Wipe(ss)
+			memguard.Wipe(wrapKey)
 			return err
 		}
 		appendSlot(SlotXWing, append(kemCT, wrapped...))
+		memguard.Wipe(ss)
+		memguard.Wipe(wrapKey)
+		memguard.Wipe(wrapped)
 	}
 
 	for _, pass := range opts.Passphrases {
@@ -242,9 +251,12 @@ func writeHeaderV2(dst io.Writer, fileKey, fileNonce []byte, opts SealOptions) e
 		wrapKey := argon2.IDKey(pass, salt, opts.Argon.Time, opts.Argon.MemoryKiB, opts.Argon.Threads, chacha20poly1305.KeySize)
 		wrapped, err := wrapSeal(wrapKey, fileKey, slotAAD(fileNonce, SlotPassphrase, public))
 		if err != nil {
+			memguard.Wipe(wrapKey)
 			return err
 		}
 		appendSlot(SlotPassphrase, append(public, wrapped...))
+		memguard.Wipe(wrapKey)
+		memguard.Wipe(wrapped)
 	}
 
 	mac, err := headerMAC(fileKey, fileNonce, hdr.Bytes())
@@ -335,11 +347,14 @@ func unlockV2(br *bufio.Reader, identity *xwing.PrivateKey, passphrase []byte) (
 			}
 			wrapKey, err := hkdf.Key(sha256.New, ss, fileNonce, wrapInfoV2, chacha20poly1305.KeySize)
 			if err != nil {
+				memguard.Wipe(ss)
 				return nil, nil, err
 			}
 			if fk, err := wrapOpen(wrapKey, s.body[xwing.CiphertextSize:], slotAAD(fileNonce, SlotXWing, kemCT)); err == nil {
 				fileKey = fk
 			}
+			memguard.Wipe(ss)
+			memguard.Wipe(wrapKey)
 		case SlotPassphrase:
 			sawPass = true
 			if passphrase == nil || fileKey != nil || len(s.body) != passSlotBody {
@@ -359,6 +374,7 @@ func unlockV2(br *bufio.Reader, identity *xwing.PrivateKey, passphrase []byte) (
 			if fk, err := wrapOpen(wrapKey, s.body[9+saltSize:], slotAAD(fileNonce, SlotPassphrase, public)); err == nil {
 				fileKey = fk
 			}
+			memguard.Wipe(wrapKey)
 		default:
 			// Unknown slot type from a future version: unusable here but
 			// still covered by the header MAC below.
@@ -439,8 +455,10 @@ func unlockV1(br *bufio.Reader, identity *xwing.PrivateKey, passphrase []byte) (
 	}
 	fileKey, err := wrapOpen(wrapKey, wrapped, header)
 	if err != nil {
+		memguard.Wipe(wrapKey)
 		return nil, nil, ErrWrongKey
 	}
+	memguard.Wipe(wrapKey)
 	return fileKey, fileNonce, nil
 }
 
@@ -451,10 +469,12 @@ func Open(dst io.Writer, src io.Reader, identity *xwing.PrivateKey, passphrase [
 	if err != nil {
 		return err
 	}
+	defer memguard.Wipe(fileKey)
 	payloadKey, err := hkdf.Key(sha256.New, fileKey, fileNonce, payloadInfo, chacha20poly1305.KeySize)
 	if err != nil {
 		return err
 	}
+	defer memguard.Wipe(payloadKey)
 	return openPayload(dst, br, payloadKey)
 }
 
@@ -477,6 +497,7 @@ func Rewrap(dst io.Writer, src io.Reader, identity *xwing.PrivateKey, passphrase
 	}
 
 	if !deep {
+		defer memguard.Wipe(fileKey)
 		if err := writeHeaderV2(dst, fileKey, fileNonce, opts); err != nil {
 			return err
 		}
@@ -486,9 +507,13 @@ func Rewrap(dst io.Writer, src io.Reader, identity *xwing.PrivateKey, passphrase
 
 	oldPayloadKey, err := hkdf.Key(sha256.New, fileKey, fileNonce, payloadInfo, chacha20poly1305.KeySize)
 	if err != nil {
+		memguard.Wipe(fileKey)
 		return err
 	}
+	defer memguard.Wipe(fileKey)
+	defer memguard.Wipe(oldPayloadKey)
 	newFileKey := make([]byte, fileKeySize)
+	defer memguard.Wipe(newFileKey)
 	if _, err := rand.Read(newFileKey); err != nil {
 		return err
 	}
@@ -503,11 +528,19 @@ func Rewrap(dst io.Writer, src io.Reader, identity *xwing.PrivateKey, passphrase
 	if err != nil {
 		return err
 	}
+	defer memguard.Wipe(newPayloadKey)
 	pr, pw := io.Pipe()
+	done := make(chan struct{})
 	go func() {
+		defer close(done)
 		pw.CloseWithError(openPayload(pw, br, oldPayloadKey))
 	}()
-	return sealPayload(dst, pr, newPayloadKey)
+	err = sealPayload(dst, pr, newPayloadKey)
+	// sealPayload can return early on a dst error while openPayload is still
+	// running, so unblock and join the pipe writer before wiping oldPayloadKey.
+	pr.CloseWithError(err)
+	<-done
+	return err
 }
 
 // setNonce writes an 11-byte big-endian counter and a final-chunk flag into
@@ -532,6 +565,7 @@ func sealPayload(dst io.Writer, src io.Reader, key []byte) error {
 	br := bufio.NewReaderSize(src, chunkSize)
 	buf := make([]byte, chunkSize)
 	sealed := make([]byte, 0, chunkSize+aead.Overhead())
+	defer memguard.Wipe(sealed[:cap(sealed)])
 	nonce := make([]byte, chacha20poly1305.NonceSize)
 	var counter uint64
 	for {
@@ -565,7 +599,9 @@ func openPayload(dst io.Writer, br *bufio.Reader, key []byte) error {
 		return err
 	}
 	sealed := make([]byte, chunkSize+aead.Overhead())
+	defer memguard.Wipe(sealed[:cap(sealed)])
 	plain := make([]byte, 0, chunkSize)
+	defer memguard.Wipe(plain[:cap(plain)])
 	nonce := make([]byte, chacha20poly1305.NonceSize)
 	var counter uint64
 	for {

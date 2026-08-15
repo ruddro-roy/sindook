@@ -1,0 +1,101 @@
+.TH SINDOOK 1 "2026-08-15" "sindook 0.5.0" "User Commands"
+.SH NAME
+sindook \- seal and open files with hybrid post-quantum encryption
+.SH SYNOPSIS
+.B sindook
+.I command
+.RI [ flags "] [" FILE ...]
+.br
+.B sindook version
+.br
+.B sindook help
+.RI [ command ]
+.SH DESCRIPTION
+Sindook encrypts files for X-Wing recipients (X25519 + ML-KEM-768),
+a passphrase, or both, and can rotate access without decrypting or
+re-encrypting the payload in fast mode. Each sealed file carries key
+slots following the LUKS model; any one slot opens the file.
+.SH COMMANDS
+.TP
+.B keygen
+create an identity, optionally passphrase-protected
+.TP
+.B init
+create or select the explicit default identity
+.TP
+.B pubkey
+print the public key of an identity
+.TP
+.B contacts
+save and use named recipient public keys
+.TP
+.B paths
+show the portable Sindook configuration locations
+.TP
+.B seal
+encrypt to recipients and/or a passphrase
+.TP
+.B open
+decrypt with an identity or passphrase
+.TP
+.B verify
+confirm sealed files decrypt cleanly, writing nothing
+.TP
+.B inspect
+show sealed-file metadata, no credentials needed
+.TP
+.B rewrap
+rotate recipients, passphrases, or the file key
+.TP
+.B shred
+overwrite files before deleting them
+.TP
+.B selftest
+run the built-in cryptographic self tests
+.TP
+.B doctor
+diagnose the installation and optionally check for updates
+.TP
+.B completion
+print a bash, zsh, fish, or powershell completion script
+.TP
+.B version
+print version and build provenance
+.PP
+Run
+.B sindook help
+.I command
+for flags and examples. Flags may appear before or after file
+operands; a literal filename beginning with \fB\-\fP follows
+.BR \-\- .
+.SH EXIT STATUS
+.TP
+.B 0
+success
+.TP
+.B 1
+command failure (I/O error, malformed input, validation, or authentication failure)
+.TP
+.B 2
+command-selection or flag-parsing usage error
+.SH SECURITY
+Sindook is pre-1.0 and has not received an independent security audit.
+It is not FIPS validated and does not claim to be quantum-proof. The
+X-Wing KEM is an Internet-Draft whose security depends on the draft's
+model. Read the threat model, security model, and security policy in
+the repository documentation before protecting sensitive data.
+.SH SEE ALSO
+.BR sindook-keygen (1),
+.BR sindook-init (1),
+.BR sindook-pubkey (1),
+.BR sindook-contacts (1),
+.BR sindook-paths (1),
+.BR sindook-seal (1),
+.BR sindook-open (1),
+.BR sindook-verify (1),
+.BR sindook-inspect (1),
+.BR sindook-rewrap (1),
+.BR sindook-shred (1),
+.BR sindook-selftest (1),
+.BR sindook-doctor (1),
+.BR sindook-completion (1)

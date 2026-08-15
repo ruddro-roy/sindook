@@ -1,0 +1,53 @@
+.TH SINDOOK-SEAL 1 "2026-08-15" "sindook 0.5.0" "User Commands"
+.SH NAME
+sindook-seal \- encrypt files to recipients and/or a passphrase
+.SH SYNOPSIS
+.B sindook seal
+[\fB\-r\fP \fIRECIPIENT\fP]... [\fB\-R\fP \fIFILE\fP]...
+[\fB\-p\fP | \fB\-passfile\fP \fIFILE\fP] [\fB\-glob\fP \fIPATTERN\fP]...
+[\fB\-a\fP] [\fB\-o\fP \fIOUT\fP] [\fB\-f\fP] [\fIFILE\fP...]
+.SH DESCRIPTION
+Seals files to recipients and/or a passphrase. Every recipient and
+passphrase becomes a key slot; any one of them opens the file. Each
+\fIFILE\fP becomes \fIFILE\fP\fB.sindook\fP; with no \fIFILE\fP,
+stdin is sealed to stdout.
+.SH OPTIONS
+.TP
+\fB\-r\fP \fIRECIPIENT\fP
+key file or literal \fBsindookpk1:\fP string, repeatable
+.TP
+\fB\-R\fP \fIFILE\fP
+file with one public key per line, repeatable (blank lines and
+\fB#\fP comments are skipped)
+.TP
+\fB\-p\fP
+add a passphrase slot, prompted at the terminal
+.TP
+\fB\-passfile\fP \fIFILE\fP
+read the passphrase from \fIFILE\fP instead, implies \fB\-p\fP
+.TP
+\fB\-glob\fP \fIPATTERN\fP
+add files matched by a portable filesystem pattern, repeatable
+.TP
+\fB\-a\fP
+armor: ASCII output that survives email and copy-paste
+.TP
+\fB\-o\fP \fIOUT\fP
+output path, \fB\-\fP for stdout (single \fIFILE\fP only)
+.TP
+\fB\-f\fP
+overwrite existing output
+.SH EXAMPLES
+.nf
+sindook seal -r my.key.pub report.pdf
+sindook seal -r alice.pub -r bob.pub -p budget.xlsx
+sindook seal -R team.keys *.log
+sindook seal -r alice.pub -glob "reports/*.pdf"
+tar cz src | sindook seal -r my.key.pub -o src.tgz.sindook
+sindook seal -r alice.pub -a -o - secret.txt | pbcopy
+.fi
+.SH SEE ALSO
+.BR sindook (1),
+.BR sindook-open (1),
+.BR sindook-rewrap (1),
+.BR sindook-pubkey (1)

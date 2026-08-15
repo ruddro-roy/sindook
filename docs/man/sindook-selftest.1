@@ -1,0 +1,18 @@
+.TH SINDOOK-SELFTEST 1 "2026-08-15" "sindook 0.5.0" "User Commands"
+.SH NAME
+sindook-selftest \- run the built-in cryptographic self tests
+.SH SYNOPSIS
+.B sindook selftest
+.SH DESCRIPTION
+Runs the X-Wing draft-10 test vectors, derandomized encapsulation and
+decapsulation checks, and sealed-file round trips compiled into the
+binary, then reports pass or fail for each and for the overall run.
+The exit code is non-zero if any test fails.
+.SH NOTES
+Passing the self test shows that the shipped build agrees with the
+published vectors and its own round trips. It is not a security audit
+of the design: Sindook is pre-1.0 and has not received an independent
+security review, and X-Wing remains an Internet-Draft.
+.SH SEE ALSO
+.BR sindook (1),
+.BR sindook-doctor (1)

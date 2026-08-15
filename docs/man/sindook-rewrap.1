@@ -1,0 +1,70 @@
+.TH SINDOOK-REWRAP 1 "2026-08-15" "sindook 0.5.0" "User Commands"
+.SH NAME
+sindook-rewrap \- rotate recipients, passphrases, or the file key
+.SH SYNOPSIS
+.B sindook rewrap
+(\fB\-i\fP \fIIDENTITY\fP | \fB\-p\fP | \fB\-passfile\fP \fIFILE\fP)
+[\fB\-identity-passfile\fP \fIFILE\fP] (\fB\-r\fP \fIRECIPIENT\fP)...
+[\fB\-R\fP \fIFILE\fP]... [\fB\-new-passphrase\fP |
+\fB\-new-passfile\fP \fIFILE\fP] [\fB\-glob\fP \fIPATTERN\fP]...
+[\fB\-deep\fP] [\fB\-o\fP \fIOUT\fP] [\fB\-f\fP] \fIFILE\fP...
+.SH DESCRIPTION
+Replaces the key slots of sealed files. By default fast mode preserves
+the payload ciphertext without decrypting or re-encrypting it, then
+copies that ciphertext to a replacement file with a fresh header.
+Fast mode does not revoke someone who kept a copy of the old file.
+\fB\-deep\fP creates a replacement with a fresh file key, so removed
+recipients cannot open that replacement using the old file key.
+Files are staged beside their original path and replaced only after a
+successful write unless \fB\-o\fP is given. Rotating a whole directory
+of files in one run is the intended use. Fast rewrap also upgrades v1
+files to the current format in place.
+.SH OPTIONS
+.TP
+\fB\-i\fP \fIIDENTITY\fP
+identity that opens the files today; use \fB@default\fP for the
+identity selected by
+.BR sindook-init (1)
+.TP
+\fB\-p\fP
+open with the current passphrase (prompted)
+.TP
+\fB\-passfile\fP \fIFILE\fP
+read the current passphrase from \fIFILE\fP
+.TP
+\fB\-identity-passfile\fP \fIFILE\fP
+read a protected identity's passphrase from \fIFILE\fP
+.TP
+\fB\-r\fP \fIRECIPIENT\fP
+new recipient, repeatable
+.TP
+\fB\-R\fP \fIFILE\fP
+file of new recipients, one key per line, repeatable
+.TP
+\fB\-new-passphrase\fP
+add a new passphrase slot (prompted)
+.TP
+\fB\-new-passfile\fP \fIFILE\fP
+read the new passphrase from \fIFILE\fP
+.TP
+\fB\-glob\fP \fIPATTERN\fP
+add files matched by a portable filesystem pattern, repeatable
+.TP
+\fB\-deep\fP
+re-encrypt the payload under a fresh file key
+.TP
+\fB\-o\fP \fIOUT\fP
+output path, \fB\-\fP for stdout (single \fIFILE\fP only)
+.TP
+\fB\-f\fP
+overwrite existing output
+.SH EXAMPLES
+.nf
+sindook rewrap -i my.key -r alice.pub -r bob.pub archive.tar.sindook
+sindook rewrap -i my.key -r alice.pub -deep archive.tar.sindook
+sindook rewrap -i old.key -R team.keys backups/*.sindook
+.fi
+.SH SEE ALSO
+.BR sindook (1),
+.BR sindook-seal (1),
+.BR sindook-open (1)

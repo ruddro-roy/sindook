@@ -1,0 +1,19 @@
+.TH SINDOOK-PATHS 1 "2026-08-15" "sindook 0.5.0" "User Commands"
+.SH NAME
+sindook-paths \- show the portable Sindook configuration locations
+.SH SYNOPSIS
+.B sindook paths
+[\fB\-json\fP]
+.SH DESCRIPTION
+Shows the operating-system-specific directory used for Sindook's
+public contacts and default identity path, along with the state of
+the default identity. \fBSINDOOK_CONFIG_DIR\fP overrides the location
+for a portable install or an isolated automation run.
+.SH OPTIONS
+.TP
+\fB\-json\fP
+machine-readable output: one JSON object
+.SH SEE ALSO
+.BR sindook (1),
+.BR sindook-init (1),
+.BR sindook-contacts (1)

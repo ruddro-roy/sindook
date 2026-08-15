@@ -9,7 +9,7 @@ import (
 	"github.com/ruddro-roy/sindook/internal/box"
 )
 
-const usageInspect = `usage: sindook inspect [-json] [FILE...]
+const usageInspect = `usage: sindook inspect [-json] [-glob PATTERN]... [FILE...]
 
 Show the public metadata of sealed files without any credentials: format
 version, key slots, and KDF parameters. This reveals nothing an attacker
@@ -19,6 +19,8 @@ key holder can verify, so treat it as a claim until the file opens.
 
 flags:
   -json  machine-readable output, one JSON array
+  -glob PATTERN
+         add files matched by a portable filesystem pattern
 
 example:
   sindook inspect budget.xlsx.sindook
@@ -37,9 +39,14 @@ type inspectReport struct {
 func cmdInspect(args []string) error {
 	fs := newFlagSet("inspect", usageInspect)
 	jsonOut := fs.Bool("json", false, "")
-	fs.Parse(args)
+	var globs multiFlag
+	fs.Var(&globs, "glob", "")
+	parseInterspersedFlags(fs, args)
 
-	inputs := fs.Args()
+	inputs, err := expandInputs(fs.Args(), globs)
+	if err != nil {
+		return err
+	}
 	if len(inputs) == 0 {
 		inputs = []string{"-"}
 	}

@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -11,6 +12,9 @@ import (
 	"time"
 
 	"golang.org/x/term"
+
+	"github.com/ruddro-roy/sindook/internal/box"
+	"github.com/ruddro-roy/sindook/internal/memguard"
 )
 
 type multiFlag []string
@@ -20,6 +24,74 @@ func (m *multiFlag) String() string { return strings.Join(*m, ",") }
 func (m *multiFlag) Set(v string) error {
 	*m = append(*m, v)
 	return nil
+}
+
+// parseInterspersedFlags accepts flags before or after file operands. The Go
+// flag package intentionally stops at the first operand, which is surprising
+// in a file-oriented CLI and breaks common Windows and PowerShell workflows
+// such as "sindook seal report.pdf -r alice.pub". A literal filename beginning
+// with '-' remains available after "--".
+func parseInterspersedFlags(fs *flag.FlagSet, args []string) {
+	boolFlags := make(map[string]bool)
+	knownFlags := make(map[string]bool)
+	fs.VisitAll(func(f *flag.Flag) {
+		knownFlags[f.Name] = true
+		if b, ok := f.Value.(interface{ IsBoolFlag() bool }); ok && b.IsBoolFlag() {
+			boolFlags[f.Name] = true
+		}
+	})
+
+	var flags, operands []string
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			// If there is no earlier operand, flag.Parse still needs the
+			// delimiter to keep a leading-dash filename literal. Once an
+			// operand exists it has already stopped parsing flags, so carrying
+			// the delimiter into fs.Args would incorrectly turn it into a file.
+			if len(operands) == 0 {
+				operands = append(operands, "--")
+			}
+			operands = append(operands, args[i+1:]...)
+			break
+		}
+		if arg == "-" || !strings.HasPrefix(arg, "-") {
+			operands = append(operands, arg)
+			continue
+		}
+
+		name := strings.TrimLeft(arg, "-")
+		hasValue := strings.Contains(name, "=")
+		if hasValue {
+			name, _, _ = strings.Cut(name, "=")
+		}
+		// Put unknown flags first too, preserving flag's familiar diagnostic.
+		flags = append(flags, arg)
+		if knownFlags[name] && !boolFlags[name] && !hasValue && i+1 < len(args) {
+			i++
+			flags = append(flags, args[i])
+		}
+	}
+	fs.Parse(append(flags, operands...))
+}
+
+// expandInputs appends deterministic filesystem glob matches to explicit
+// operands. It gives cmd.exe and PowerShell users the same batch capability
+// as shells that expand wildcards themselves, without changing the meaning of
+// ordinary literal file arguments.
+func expandInputs(inputs, patterns []string) ([]string, error) {
+	expanded := append([]string(nil), inputs...)
+	for _, pattern := range patterns {
+		matches, err := filepath.Glob(pattern)
+		if err != nil {
+			return nil, fmt.Errorf("sindook: invalid glob %q: %w", pattern, err)
+		}
+		if len(matches) == 0 {
+			return nil, fmt.Errorf("sindook: glob %q matched no files", pattern)
+		}
+		expanded = append(expanded, matches...)
+	}
+	return expanded, nil
 }
 
 // openInput opens arg for reading, treating "" and "-" as stdin. size is -1
@@ -105,17 +177,6 @@ func writeOutputStaged(path string, perm os.FileMode, fn func(io.Writer) error) 
 	return replaceStaged(f.Name(), path)
 }
 
-// replaceStaged replaces path with a closed staged file. If replacement fails,
-// it removes the staged file so a failed operation does not leave a second
-// copy of sensitive output beside the original.
-func replaceStaged(stagedPath, path string) error {
-	if err := os.Rename(stagedPath, path); err != nil {
-		os.Remove(stagedPath)
-		return err
-	}
-	return nil
-}
-
 func writeFileNew(path string, data []byte, perm os.FileMode, force bool) error {
 	if !force {
 		f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, perm)
@@ -136,6 +197,29 @@ func writeFileNew(path string, data []byte, perm os.FileMode, force bool) error 
 	})
 }
 
+// preflightOutput checks every output in a multi-file operation before the
+// first write. It is used for identity pairs so an existing public key cannot
+// leave behind a newly-created private key when key generation fails.
+func preflightOutput(path string, force bool) error {
+	info, err := os.Lstat(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if !force {
+		return &os.PathError{Op: "open", Path: path, Err: os.ErrExist}
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("sindook: refusing to overwrite symbolic link %s", path)
+	}
+	if !info.Mode().IsRegular() {
+		return fmt.Errorf("sindook: refusing to overwrite non-regular file %s", path)
+	}
+	return nil
+}
+
 // limitedWriter fails once more than n bytes are written, bounding the
 // decrypted size of files that should be small (identity files).
 type limitedWriter struct {
@@ -152,21 +236,40 @@ func (l *limitedWriter) Write(p []byte) (int, error) {
 }
 
 // readPassfile reads a passphrase from the first line of a file, the
-// scripting alternative to the interactive prompt.
+// scripting alternative to the interactive prompt. The returned passphrase
+// lives in a fresh buffer the caller must wipe when done; the file contents
+// are zeroed here. A file readable by other accounts earns a warning.
 func readPassfile(path string) ([]byte, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
+	}
+	defer memguard.Wipe(raw)
+	if info, statErr := os.Stat(path); statErr == nil {
+		if warning := warnInsecurePerms(path, info); warning != "" {
+			fmt.Fprintln(os.Stderr, warning)
+		}
 	}
 	pass, _, _ := bytes.Cut(raw, []byte("\n"))
 	pass = bytes.TrimSuffix(pass, []byte("\r"))
 	if len(pass) == 0 {
 		return nil, fmt.Errorf("sindook: empty passphrase in %s", path)
 	}
+	pass = append([]byte(nil), pass...)
 	return pass, nil
 }
 
 const progressMin = 16 << 20
+
+// wipePassphrases zeroes every passphrase buffer in opts once sealing is
+// finished, and wipeIdentity zeroes a loaded private key. Command handlers
+// defer these so secrets do not outlive the run.
+func wipePassphrases(opts *box.SealOptions) {
+	for _, p := range opts.Passphrases {
+		memguard.Wipe(p)
+	}
+	opts.Passphrases = nil
+}
 
 // withProgress reports progress on stderr while r is consumed, so sealing a
 // terabyte does not look like a hang. It stays silent for small inputs,

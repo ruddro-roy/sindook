@@ -2,25 +2,33 @@ package main
 
 import (
 	"bufio"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 
 	"github.com/ruddro-roy/sindook/internal/armor"
 	"github.com/ruddro-roy/sindook/internal/box"
+	"github.com/ruddro-roy/sindook/internal/memguard"
 	"github.com/ruddro-roy/sindook/xwing"
 )
 
-const usageOpen = `usage: sindook open (-i IDENTITY | -p | -passfile FILE) [-o OUT] [-f] [FILE...]
+const usageOpen = `usage: sindook open (-i IDENTITY | -p | -passfile FILE)
+                    [-identity-passfile FILE] [-glob PATTERN]... [-o OUT] [-f] [FILE...]
 
 Decrypt sealed files. Armored input is detected automatically. Each
 FILE.sindook becomes FILE; with no FILE, stdin is opened to stdout.
 
 flags:
   -i IDENTITY     identity file (prompts if passphrase-protected)
+                  use @default for the identity selected by sindook init
   -p              open with a passphrase, prompted at the terminal
   -passfile FILE  read the passphrase from FILE instead
+  -identity-passfile FILE
+                  read a protected identity's passphrase from FILE
+  -glob PATTERN    add files matched by a portable filesystem pattern
   -o OUT          output path, - for stdout (single FILE only)
   -f              overwrite existing output
 
@@ -35,17 +43,29 @@ func cmdOpen(args []string) error {
 	idPath := fs.String("i", "", "")
 	usePass := fs.Bool("p", false, "")
 	passfile := fs.String("passfile", "", "")
+	identityPassfile := fs.String("identity-passfile", "", "")
+	var globs multiFlag
+	fs.Var(&globs, "glob", "")
 	out := fs.String("o", "", "")
 	force := fs.Bool("f", false, "")
-	fs.Parse(args)
+	parseInterspersedFlags(fs, args)
 
-	inputs := fs.Args()
-	if *out != "" && len(inputs) > 1 {
-		return errors.New("sindook: -o cannot be combined with multiple input files")
-	}
-	id, pass, err := loadCredentials(*idPath, *usePass, *passfile, "passphrase")
+	inputs, err := expandInputs(fs.Args(), globs)
 	if err != nil {
 		return err
+	}
+	if *out != "" && len(inputs) > 1 {
+		return usagef("-o cannot be combined with multiple input files")
+	}
+	id, pass, err := loadCredentials(*idPath, *usePass, *passfile, *identityPassfile, "passphrase")
+	if err != nil {
+		return err
+	}
+	if id != nil {
+		defer id.Wipe()
+	}
+	if pass != nil {
+		defer memguard.Wipe(pass)
 	}
 	if len(inputs) == 0 {
 		inputs = []string{"-"}
@@ -85,7 +105,8 @@ func openOne(inPath, outPath string, id *xwing.PrivateKey, pass []byte, force bo
 	})
 }
 
-const usageVerify = `usage: sindook verify (-i IDENTITY | -p | -passfile FILE) [FILE...]
+const usageVerify = `usage: sindook verify (-i IDENTITY | -p | -passfile FILE)
+                      [-identity-passfile FILE] [-glob PATTERN]... [-json] [FILE...]
 
 Fully decrypt and authenticate sealed files without writing plaintext
 anywhere. Confirms a backup will actually open before you need it. Every
@@ -94,37 +115,78 @@ any did.
 
 flags:
   -i IDENTITY     identity file (prompts if passphrase-protected)
+                  use @default for the identity selected by sindook init
   -p              verify with a passphrase, prompted at the terminal
   -passfile FILE  read the passphrase from FILE instead
+  -identity-passfile FILE
+                  read a protected identity's passphrase from FILE
+  -glob PATTERN    add files matched by a portable filesystem pattern
+  -json            print one machine-readable JSON array with per-file
+                  status instead of human-readable ok/FAILED lines
 
 example:
   sindook verify -i my.key backups/*.sindook
 `
+
+type verifyResult struct {
+	File   string `json:"file"`
+	Status string `json:"status"`
+	Error  string `json:"error,omitempty"`
+}
 
 func cmdVerify(args []string) error {
 	fs := newFlagSet("verify", usageVerify)
 	idPath := fs.String("i", "", "")
 	usePass := fs.Bool("p", false, "")
 	passfile := fs.String("passfile", "", "")
-	fs.Parse(args)
+	identityPassfile := fs.String("identity-passfile", "", "")
+	jsonOut := fs.Bool("json", false, "")
+	var globs multiFlag
+	fs.Var(&globs, "glob", "")
+	parseInterspersedFlags(fs, args)
 
-	id, pass, err := loadCredentials(*idPath, *usePass, *passfile, "passphrase")
+	id, pass, err := loadCredentials(*idPath, *usePass, *passfile, *identityPassfile, "passphrase")
 	if err != nil {
 		return err
 	}
-	inputs := fs.Args()
+	if id != nil {
+		defer id.Wipe()
+	}
+	if pass != nil {
+		defer memguard.Wipe(pass)
+	}
+	inputs, err := expandInputs(fs.Args(), globs)
+	if err != nil {
+		return err
+	}
 	if len(inputs) == 0 {
 		inputs = []string{"-"}
 	}
 	var errs []error
+	results := make([]verifyResult, 0, len(inputs))
 	for _, inPath := range inputs {
 		name, err := verifyOne(inPath, id, pass)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("%s: %w", name, err))
-			fmt.Printf("%s: FAILED\n", name)
+			results = append(results, verifyResult{File: name, Status: "failed", Error: err.Error()})
 			continue
 		}
-		fmt.Printf("%s: ok\n", name)
+		results = append(results, verifyResult{File: name, Status: "ok"})
+	}
+	if *jsonOut {
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		if err := enc.Encode(results); err != nil {
+			errs = append(errs, err)
+		}
+	} else {
+		for _, res := range results {
+			if res.Status == "ok" {
+				fmt.Printf("%s: ok\n", res.File)
+			} else {
+				fmt.Printf("%s: FAILED\n", res.File)
+			}
+		}
 	}
 	return errors.Join(errs...)
 }

@@ -2,11 +2,42 @@ package main
 
 import (
 	"errors"
+	"flag"
 	"io"
 	"os"
 	"path/filepath"
 	"testing"
 )
+
+func TestParseInterspersedFlagsPreservesOperandsAndDelimiter(t *testing.T) {
+	fs := flag.NewFlagSet("test", flag.ContinueOnError)
+	recipient := fs.String("r", "", "")
+	parseInterspersedFlags(fs, []string{"report.txt", "-r", "alice.pub", "--", "-literal"})
+	if *recipient != "alice.pub" {
+		t.Fatalf("recipient = %q", *recipient)
+	}
+	if got, want := fs.Args(), []string{"report.txt", "-literal"}; !equalStrings(got, want) {
+		t.Fatalf("operands = %#v, want %#v", got, want)
+	}
+
+	fs = flag.NewFlagSet("test", flag.ContinueOnError)
+	parseInterspersedFlags(fs, []string{"--", "-literal"})
+	if got, want := fs.Args(), []string{"-literal"}; !equalStrings(got, want) {
+		t.Fatalf("leading-dash operand = %#v, want %#v", got, want)
+	}
+}
+
+func equalStrings(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
 
 func TestWithOutputForceFailurePreservesExistingFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "existing.txt")

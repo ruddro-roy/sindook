@@ -9,13 +9,15 @@ import (
 
 	"github.com/ruddro-roy/sindook/internal/armor"
 	"github.com/ruddro-roy/sindook/internal/box"
+	"github.com/ruddro-roy/sindook/internal/memguard"
 	"github.com/ruddro-roy/sindook/xwing"
 )
 
 const usageRewrap = `usage: sindook rewrap (-i IDENTITY | -p | -passfile FILE)
+                      [-identity-passfile FILE]
                       (-r RECIPIENT)... [-R FILE]...
                       [-new-passphrase | -new-passfile FILE]
-                      [-deep] [-o OUT] [-f] FILE...
+                      [-glob PATTERN]... [-deep] [-o OUT] [-f] FILE...
 
 Replace the key slots of sealed files. By default fast mode preserves the
 payload ciphertext without decrypting or re-encrypting it, then copies that
@@ -28,12 +30,16 @@ directory of files in one run is the intended use.
 
 flags:
   -i IDENTITY         identity that opens the files today
+                      use @default for the identity selected by sindook init
   -p                  open with the current passphrase (prompted)
   -passfile FILE      read the current passphrase from FILE
+  -identity-passfile FILE
+                      read a protected identity's passphrase from FILE
   -r RECIPIENT        new recipient, repeatable
   -R FILE             file of new recipients, one key per line, repeatable
   -new-passphrase     add a new passphrase slot (prompted)
   -new-passfile FILE  read the new passphrase from FILE
+  -glob PATTERN        add files matched by a portable filesystem pattern
   -deep               re-encrypt the payload under a fresh file key
   -o OUT              output path, - for stdout (single FILE only)
   -f                  overwrite existing output
@@ -49,32 +55,45 @@ func cmdRewrap(args []string) error {
 	idPath := fs.String("i", "", "")
 	usePass := fs.Bool("p", false, "")
 	passfile := fs.String("passfile", "", "")
+	identityPassfile := fs.String("identity-passfile", "", "")
 	var recipients, recipientFiles multiFlag
 	fs.Var(&recipients, "r", "")
 	fs.Var(&recipientFiles, "R", "")
 	newPass := fs.Bool("new-passphrase", false, "")
 	newPassfile := fs.String("new-passfile", "", "")
+	var globs multiFlag
+	fs.Var(&globs, "glob", "")
 	deep := fs.Bool("deep", false, "")
 	out := fs.String("o", "", "")
 	force := fs.Bool("f", false, "")
-	fs.Parse(args)
+	parseInterspersedFlags(fs, args)
 
-	inputs := fs.Args()
-	if len(inputs) == 0 {
-		return errors.New("sindook: rewrap takes at least one sealed file")
-	}
-	if *out != "" && len(inputs) > 1 {
-		return errors.New("sindook: -o cannot be combined with multiple input files")
-	}
-
-	id, pass, err := loadCredentials(*idPath, *usePass, *passfile, "current passphrase")
+	inputs, err := expandInputs(fs.Args(), globs)
 	if err != nil {
 		return err
+	}
+	if len(inputs) == 0 {
+		return usagef("rewrap takes at least one sealed file")
+	}
+	if *out != "" && len(inputs) > 1 {
+		return usagef("-o cannot be combined with multiple input files")
+	}
+
+	id, pass, err := loadCredentials(*idPath, *usePass, *passfile, *identityPassfile, "current passphrase")
+	if err != nil {
+		return err
+	}
+	if id != nil {
+		defer id.Wipe()
+	}
+	if pass != nil {
+		defer memguard.Wipe(pass)
 	}
 	opts, err := buildSealOptions(recipients, recipientFiles, *newPass, *newPassfile, "new passphrase")
 	if err != nil {
 		return err
 	}
+	defer wipePassphrases(&opts)
 
 	if *out != "" {
 		in, err := os.Open(inputs[0])

@@ -10,12 +10,36 @@ permissions:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    name: test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: "1.26.x"
+          go-version-file: go.mod
+      - name: build
+        run: go build ./...
+      - name: test
+        run: go test ./...
+      - name: test interoperability module
+        working-directory: interop
+        run: |
+          go vet ./...
+          go test ./...
+
+  quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
       - name: gofmt
         run: |
           git ls-files -z -- '*.go' | xargs -0 gofmt -l > /tmp/gofmt.out
@@ -25,10 +49,17 @@ jobs:
           fi
       - name: vet
         run: go vet ./...
-      - name: test
+      - name: race
         run: go test -race ./...
-      - name: interop
-        run: cd interop && go vet ./... && go test ./...
+      - name: cross-compile
+        run: |
+          set -eu
+          for goos in linux darwin windows freebsd openbsd netbsd; do
+            for goarch in amd64 arm64; do
+              echo "==> building for ${goos}/${goarch}"
+              CGO_ENABLED=0 GOOS="${goos}" GOARCH="${goarch}" go build ./...
+            done
+          done
       - name: fuzz smoke
         run: |
           for target in FuzzOpenRecipient FuzzOpenPassphrase FuzzSealOpenRoundTrip FuzzBitFlip; do
@@ -39,26 +70,6 @@ jobs:
       - name: timing
         run: SINDOOK_TIMING=1 go test ./xwing -run '^TestDecapsulationTiming$' -count=1 -v
       - name: govulncheck
-        run: go run golang.org/x/vuln/cmd/govulncheck@v1.6.0 ./...
-
-  platform:
-    name: ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [macos-latest, windows-latest]
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        uses: golang/govulncheck-action@032d45514ae346b1db93c04b0c90b841c370344f # v1
         with:
-          go-version: "1.26.x"
-      - name: test root module
-        run: |
-          go vet ./...
-          go test ./...
-      - name: test interoperability module
-        working-directory: interop
-        run: |
-          go vet ./...
-          go test ./...
+          go-package: ./...
