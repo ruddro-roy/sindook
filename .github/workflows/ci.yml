@@ -101,7 +101,7 @@ jobs:
             go.sum
             interop/go.sum
       - name: cache fuzz corpora
-        uses: actions/cache@0057852bfaa89aea4db6ed64c14953a7db3227e2 # v4.3.0
+        uses: actions/cache@v4 # v4.3.0
         with:
           path: |
             internal/box/testdata/fuzz
