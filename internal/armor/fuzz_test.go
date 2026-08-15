@@ -73,7 +73,7 @@ func FuzzArmorReader(f *testing.F) {
 	f.Add([]byte("not armor at all"))
 	f.Add(bytes.Repeat([]byte("A"), 2048))
 	f.Add([]byte(begin + "\n" + strings.Repeat("A", 1025) + "\n" + end + "\n")) // oversized line
-	f.Add([]byte(begin + "\n!!!!\n" + end + "\n"))                             // bad base64
+	f.Add([]byte(begin + "\n!!!!\n" + end + "\n"))                              // bad base64
 	f.Add([]byte(begin + "\nYWI=\nYWI=\n" + end + "\n"))                        // padding mid-body
 
 	f.Fuzz(func(t *testing.T, data []byte) {
