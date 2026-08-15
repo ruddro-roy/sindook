@@ -20,13 +20,17 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: "1.26.x"
+          go-version-file: go.mod
       - name: test
+        env:
+          GOTOOLCHAIN: auto
         run: |
           go vet ./...
           go test -race ./...
           cd interop && go vet ./... && go test ./...
       - name: govulncheck
+        env:
+          GOTOOLCHAIN: auto
         run: go run golang.org/x/vuln/cmd/govulncheck@v1.6.0 ./...
       - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
       - uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
