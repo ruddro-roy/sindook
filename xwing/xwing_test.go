@@ -165,3 +165,31 @@ func TestTamperedCiphertext(t *testing.T) {
 		}
 	}
 }
+
+// TestWipeInvalidatesKey confirms Wipe zeroes the seed, releases the
+// expanded key material, and makes the key refuse further decapsulation.
+func TestWipeInvalidatesKey(t *testing.T) {
+	k, err := GenerateKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, ct, err := Encapsulate(k.PublicKey())
+	if err != nil {
+		t.Fatal(err)
+	}
+	k.Wipe()
+	for _, b := range k.Seed() {
+		if b != 0 {
+			t.Fatal("Wipe did not zero the seed")
+		}
+	}
+	if k.dkM != nil || k.skX != nil {
+		t.Fatal("Wipe did not release the expanded key material")
+	}
+	if _, err := k.Decapsulate(ct); err == nil {
+		t.Fatal("decapsulation succeeded after Wipe")
+	}
+	if k.PublicKey() == nil {
+		t.Fatal("public key metadata must remain available after Wipe")
+	}
+}

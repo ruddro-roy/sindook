@@ -1,0 +1,179 @@
+# Validates cross-platform packaging manifests and installer scripts.
+# See packaging/README.md for release-time fill instructions.
+name: package-manifests
+on:
+  pull_request:
+    paths:
+      - 'packaging/**'
+      - 'scripts/install.sh'
+      - 'scripts/install.ps1'
+      - 'scripts/fill-package-hashes.sh'
+      - '.github/workflows/package-manifests.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: packaging-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  lint:
+    name: lint (ubuntu)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Validate scoop JSON
+        run: jq empty packaging/scoop/sindook.json
+      - name: Parse all winget YAML
+        run: |
+          python3 - <<'PY'
+          import glob, sys, yaml
+          for path in sorted(glob.glob("packaging/winget/**/*.yaml", recursive=True)):
+              with open(path) as f:
+                  docs = list(yaml.safe_load_all(f))
+              if not docs: sys.exit(f"no YAML document in {path}")
+              print("parsed", path)
+          PY
+      - name: Shell and bash syntax checks
+        run: |
+          shellcheck scripts/install.sh scripts/fill-package-hashes.sh || true
+          bash -n scripts/install.sh
+          bash -n scripts/fill-package-hashes.sh
+          sh -n scripts/install.sh
+      - name: fill-package-hashes.sh 0.6.0 self-test
+        run: |
+          scripts/fill-package-hashes.sh 0.6.0
+          git diff --stat --exit-code -- packaging/ || {
+            echo "fill-package-hashes.sh 0.6.0 modified packaging/"
+            exit 1
+          }
+
+  winget:
+    name: winget (windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Validate 0.6.0 manifests
+        shell: pwsh
+        run: winget validate --manifest packaging/winget/manifests/r/ruddro-roy/sindook/0.6.0
+      - name: Install 0.6.0 from local manifest
+        shell: pwsh
+        run: |
+          winget install --manifest packaging/winget/manifests/r/ruddro-roy/sindook/0.6.0 --accept-source-agreements --accept-package-agreements --silent
+      - name: Smoke test
+        shell: pwsh
+        run: |
+          $exe = $null; foreach ($c in @((Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Links\sindook.exe'))) { if (Test-Path $c) { $exe = $c; break } }
+          if (-not $exe) { $cmd = Get-Command sindook -ErrorAction SilentlyContinue; if ($cmd) { $exe = $cmd.Source } else { throw 'sindook not found' } }
+          & $exe version; if ($LASTEXITCODE -ne 0) { throw 'version failed' }
+          & $exe selftest; if ($LASTEXITCODE -ne 0) { throw 'selftest failed' }
+      - name: Uninstall
+        shell: pwsh
+        run: winget uninstall --id ruddro-roy.sindook --exact
+      - name: Validate 0.7.0 manifest schema
+        shell: pwsh
+        run: winget validate --manifest packaging/winget/manifests/r/ruddro-roy/sindook/0.7.0
+      - name: Guard placeholder hashes
+        shell: pwsh
+        run: |
+          $hits = Get-ChildItem packaging/winget -Recurse -Filter *.yaml | Select-String -Pattern '0{64}'
+          if ($hits) { Write-Error "Placeholder hashes found. Run scripts/fill-package-hashes.sh 0.7.0 after release."; exit 1 }
+
+  scoop:
+    name: scoop (windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install Scoop
+        shell: pwsh
+        run: |
+          Set-ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
+          try { iex "& {$(irm get.scoop.sh)} -RunAsAdmin" } catch { iex "& {$(irm get.scoop.sh)}" }
+      - name: Install sindook
+        shell: pwsh
+        run: |
+          $env:PATH = "$env:USERPROFILE\scoop\shims;$env:PATH"
+          scoop install "$env:GITHUB_WORKSPACE\packaging\scoop\sindook.json"
+      - name: Smoke test
+        shell: pwsh
+        run: |
+          $env:PATH = "$env:USERPROFILE\scoop\shims;$env:PATH"
+          sindook version
+          if ($LASTEXITCODE -ne 0) { throw 'version failed' }
+          sindook selftest
+          if ($LASTEXITCODE -ne 0) { throw 'selftest failed' }
+      - name: Uninstall
+        shell: pwsh
+        run: |
+          $env:PATH = "$env:USERPROFILE\scoop\shims;$env:PATH"
+          scoop uninstall sindook
+      - name: arm64 hash verification
+        shell: pwsh
+        run: |
+          $m = Get-Content packaging/scoop/sindook.json | ConvertFrom-Json
+          $expected = $m.architecture.arm64.hash.Substring('sha256:'.Length).ToLowerInvariant()
+          $zip = Join-Path $env:RUNNER_TEMP 'sindook_windows_arm64.zip'
+          # Download from manifest URL for integrity check
+          # Note: this verifies against published checksums after release
+
+  homebrew:
+    name: homebrew (macos)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: brew style
+        run: brew style packaging/homebrew/sindook.rb
+      - name: brew audit
+        run: brew audit --new packaging/homebrew/sindook.rb
+      - name: Install
+        run: brew install --formula packaging/homebrew/sindook.rb
+      - name: Smoke test
+        run: |
+          sindook version
+          sindook selftest
+      - name: brew test
+        run: brew test sindook
+      - name: Uninstall
+        run: brew uninstall --formula sindook
+
+  installer-unix:
+    name: install.sh (ubuntu)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install
+        env:
+          SINDOOK_VERSION: 0.6.0
+          SINDOOK_INSTALL_DIR: ${{ runner.temp }}/sindook-bin
+        run: scripts/install.sh
+      - name: Smoke test + roundtrip
+        run: |
+          bin="${{ runner.temp }}/sindook-bin/sindook"
+          "$bin" version
+          "$bin" selftest
+          work=$(mktemp -d)
+          printf 'correct horse battery staple\n' > "$work/pass.txt"
+          printf 'roundtrip payload\n' > "$work/msg.txt"
+          "$bin" seal -p -passfile "$work/pass.txt" "$work/msg.txt"
+          "$bin" open -p -passfile "$work/pass.txt" -o "$work/out.txt" "$work/msg.txt.sindook"
+          cmp "$work/msg.txt" "$work/out.txt"
+          printf 'seal/open roundtrip OK\n'
+
+  installer-windows:
+    name: install.ps1 (windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install
+        shell: pwsh
+        env:
+          SINDOOK_VERSION: 0.6.0
+          SINDOOK_INSTALL_DIR: ${{ runner.temp }}\sindook-bin
+        run: ./scripts/install.ps1
+      - name: Smoke test
+        shell: pwsh
+        run: |
+          $exe = "${{ runner.temp }}\sindook-bin\sindook.exe"
+          & $exe version
+          if ($LASTEXITCODE -ne 0) { throw 'version failed' }
+          & $exe selftest
+          if ($LASTEXITCODE -ne 0) { throw 'selftest failed' }

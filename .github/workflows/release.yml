@@ -7,13 +7,93 @@ on:
 permissions:
   contents: read
 
+# A given tag must never have overlapping release jobs; a retry of the same
+# tag waits for the previous run instead of racing it.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
+  # Gate 1: the tag must be a clean semver tag that resolves to exactly the
+  # commit being built, the working tree must be clean, and the source-tree
+  # dev default must match "<version>-dev".
+  validate:
+    name: validate tag
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: validate release preconditions
+        run: |
+          set -euo pipefail
+          ref="${GITHUB_REF}"
+          case "$ref" in
+            refs/tags/v*)
+              ;;
+            *)
+              echo "::error::release must be triggered by a refs/tags/v* tag, got: $ref"
+              exit 1
+              ;;
+          esac
+          tag="${ref#refs/tags/}"
+          version="${tag#v}"
+          if ! printf '%s' "$tag" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::tag '$tag' does not parse as vX.Y.Z"
+            exit 1
+          fi
+          if printf '%s' "$version" | grep -Eq '(^|\.)0[0-9]'; then
+            echo "::error::tag '$tag' has a version component with a leading zero"
+            exit 1
+          fi
+          tag_commit="$(git rev-parse "${ref}^{}")"
+          head_commit="$(git rev-parse HEAD)"
+          if [ "$tag_commit" != "$head_commit" ] || [ "$tag_commit" != "${GITHUB_SHA}" ]; then
+            echo "::error::tag $tag resolves to $tag_commit, HEAD is $head_commit, GITHUB_SHA is ${GITHUB_SHA}"
+            exit 1
+          fi
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "::error::working tree is dirty:"
+            git status --porcelain
+            exit 1
+          fi
+          dev_default="$(grep -E 'var version = ' cmd/sindook/main.go | sed -E 's/^[^"]*"([^"]*)".*/\1/')"
+          if [ "$dev_default" != "${version}-dev" ]; then
+            echo "::error::cmd/sindook/main.go dev default is '$dev_default', expected '${version}-dev'"
+            exit 1
+          fi
+          if [ ! -f scripts/check-version-consistency.sh ]; then
+            echo "::error::scripts/check-version-consistency.sh not found"
+            exit 1
+          fi
+          bash scripts/check-version-consistency.sh "$version"
+          echo "::notice::tag $tag -> version $version at $tag_commit, all preconditions met"
+
+  # Gate 2: the full reusable CI suite (test matrix, race detector, quality
+  # checks, govulncheck) must pass on the tagged commit before anything is
+  # built or published.
+  ci:
+    name: ci gate
+    needs: validate
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+
+  # Gate 3: build, package, sign and attest. goreleaser publishes the GitHub
+  # release as a DRAFT (release.draft in .goreleaser.yaml), so nothing is
+  # public yet. The produced dist/ is uploaded as a workflow artifact so the
+  # verify job re-checks exactly what was produced.
   release:
+    name: build, sign, attest
+    needs: [validate, ci]
     runs-on: ubuntu-latest
     permissions:
       contents: write
       id-token: write
       attestations: write
+      actions: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -21,17 +101,6 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
-      - name: test
-        env:
-          GOTOOLCHAIN: auto
-        run: |
-          go vet ./...
-          go test -race ./...
-          cd interop && go vet ./... && go test ./...
-      - name: govulncheck
-        env:
-          GOTOOLCHAIN: auto
-        run: go run golang.org/x/vuln/cmd/govulncheck@v1.6.0 ./...
       - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
       - uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
       - uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
@@ -49,3 +118,57 @@ jobs:
             dist/*.rpm
             dist/*.apk
             dist/checksums.txt
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dist
+          path: dist/
+          retention-days: 14
+          if-no-files-found: error
+
+  # Gate 4: independently re-verify everything the release job produced:
+  # checksums, keyless signature, provenance attestations, SBOMs, archive
+  # contents, the binary itself and the man pages. Runs strict (no skips).
+  verify:
+    name: verify release artifacts
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      attestations: read
+      actions: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.ref }}
+      - uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
+        with:
+          name: dist
+          path: dist
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      - name: verify checksums, signatures, attestations, sboms, contents
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF#refs/tags/}"
+          version="${tag#v}"
+          identity="^https://github.com/ruddro-roy/sindook/.github/workflows/release.yml@refs/tags/${tag}\$"
+          bash scripts/verify-release.sh "$tag" "$version" "$identity"
+
+  # Gate 5: only a fully verified draft becomes public. If any earlier job
+  # fails, the draft release is never promoted, so no public release can be
+  # left behind from a failing tree.
+  publish:
+    name: promote verified draft to public
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: publish draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh release edit "${GITHUB_REF#refs/tags/}" --draft=false --repo ruddro-roy/sindook

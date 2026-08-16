@@ -1,4 +1,4 @@
-.TH SINDOOK-CONTACTS 1 "2026-08-15" "sindook 0.5.0" "User Commands"
+.TH SINDOOK-CONTACTS 1 "2026-08-16" "sindook 0.7.0" "User Commands"
 .SH NAME
 sindook-contacts \- save and use named recipient public keys
 .SH SYNOPSIS
@@ -10,11 +10,16 @@ Saves shareable recipient public keys under portable,
 case-insensitive names. Use a saved contact anywhere a recipient is
 accepted, for example \fB\-r @alice\fP. The configuration file
 contains public keys and an optional default identity path only; it
-never contains private keys or passphrases.
+never contains private keys or passphrases. The fingerprint shown by
+\fBlist\fP is the first 16 bytes of SHA\-256 over the decoded public
+key, lowercase hex with a \fBsha256:\fP prefix: a 128\-bit collision
+space used to recognize a contact at a glance, not to authenticate it.
 .SH SUBCOMMANDS
 .TP
 .B list
-list saved contacts (with \fB\-json\fP: one JSON array)
+list saved contacts as \fB@name\fP plus a short \fBsha256:\fP key
+fingerprint; \fBshow\fP prints the full public key (with \fB\-json\fP:
+one JSON array of contacts with full public keys)
 .TP
 \fBadd\fP [\fB\-f\fP] \fINAME\fP \fIPUBLIC_KEY_OR_FILE\fP
 save a public key under \fINAME\fP; \fB\-f\fP replaces an existing

@@ -1,0 +1,22 @@
+# Installer manifest for Sindook v0.6.0.
+# InstallerSha256 values are the SHA-256 digests of the published v0.6.0
+# Windows archives from the release's checksums.txt.
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.12.0.schema.json
+
+PackageIdentifier: ruddro-roy.sindook
+PackageVersion: 0.6.0
+InstallerType: zip
+NestedInstallerType: portable
+NestedInstallerFiles:
+- RelativeFilePath: sindook.exe
+  PortableCommandAlias: sindook
+ReleaseDate: 2026-08-15
+Installers:
+- Architecture: x64
+  InstallerUrl: https://github.com/ruddro-roy/sindook/releases/download/v0.6.0/sindook_0.6.0_windows_amd64.zip
+  InstallerSha256: 49ab89856d173a9b8221f66127cbfa753332bc55600e9b65cac0e04f47c5e3b0
+- Architecture: arm64
+  InstallerUrl: https://github.com/ruddro-roy/sindook/releases/download/v0.6.0/sindook_0.6.0_windows_arm64.zip
+  InstallerSha256: 1cefa27d4eaed370c4eed0f426b276493861879f092b251bba62c3ee99ea56b9
+ManifestType: installer
+ManifestVersion: 1.12.0

@@ -1,4 +1,4 @@
-.TH SINDOOK 1 "2026-08-15" "sindook 0.5.0" "User Commands"
+.TH SINDOOK 1 "2026-08-16" "sindook 0.7.0" "User Commands"
 .SH NAME
 sindook \- seal and open files with hybrid post-quantum encryption
 .SH SYNOPSIS
@@ -74,10 +74,14 @@ operands; a literal filename beginning with \fB\-\fP follows
 success
 .TP
 .B 1
-command failure (I/O error, malformed input, validation, or authentication failure)
+command failure (I/O error, malformed input, validation)
 .TP
 .B 2
 command-selection or flag-parsing usage error
+.TP
+.B 3
+authentication failure (wrong identity or passphrase, missing
+credential, or header tampering)
 .SH SECURITY
 Sindook is pre-1.0 and has not received an independent security audit.
 It is not FIPS validated and does not claim to be quantum-proof. The

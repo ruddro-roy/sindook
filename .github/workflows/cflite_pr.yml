@@ -6,7 +6,9 @@ on:
       - 'go.mod'
       - 'go.sum'
       - '.clusterfuzzlite/**'
-permissions: read-all
+permissions:
+  contents: read
+  security-events: write
 jobs:
   pr-fuzzing:
     runs-on: ubuntu-latest
@@ -25,3 +27,4 @@ jobs:
           fuzz-seconds: 300
           mode: code-change
           sanitizer: address
+          output-sarif: true

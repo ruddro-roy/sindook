@@ -10,18 +10,23 @@ Sindook is a usable pre-1.0 command-line tool for encrypting files for recipient
 
 Each sealed file carries key slots, following the LUKS model. `rewrap` can rotate recipients, passphrases, and format versions without decrypting or re-encrypting the payload in fast mode. Fast rewrap writes a new header and copies the existing ciphertext into a replacement file. Deep rewrap generates a fresh file key and re-encrypts the replacement payload, so removed recipients cannot open that replacement through an old slot. Neither mode can invalidate copies already held by an attacker.
 
-> **Status:** Sindook is pre-1.0 and has not received an independent security audit. It is not FIPS validated and does not claim to be quantum-proof. Read the [threat model](docs/THREAT_MODEL.md), [security model](docs/SECURITY.md), and [security policy](SECURITY.md) before using it for sensitive data.
+> **Status:** Sindook is pre-1.0 and has not received an independent security audit. It is not FIPS validated and does not claim to be quantum-proof. Read the [threat model](docs/THREAT_MODEL.md), [security model](docs/SECURITY.md), and [security policy](SECURITY.md) before using it for sensitive data. The v1.0 readiness checklist is in [docs/V1_READINESS.md](docs/V1_READINESS.md).
 
 ## Install
 
 Tagged releases ship native, CGO-free binaries for Linux, macOS, and Windows
-on both amd64 and arm64. Every archive includes a checksum, SBOM, Sigstore
-bundle, and GitHub build provenance.
+on both amd64 and arm64 (FreeBSD builds from source). Every archive includes
+a checksum, SBOM, Sigstore bundle, and GitHub build provenance.
 
-Install from source on any supported operating system:
+Install the current release from source on any supported operating system
+(Go 1.26.6+; the Go toolchain auto-downloads it if needed):
 
-    go install github.com/ruddro-roy/sindook/cmd/sindook@latest
+    go install github.com/ruddro-roy/sindook/cmd/sindook@v0.7.0
     sindook version
+    # sindook 0.7.0 — tagged installs report the exact release version
+
+`@latest` also works; `@v0.7.0` pins the release. A build from a source
+checkout reports `sindook 0.7.0-dev` with commit provenance instead.
 
 Or install a verified release binary without Go. From a checked-out Sindook
 source tree, run one of the included user-local installers:
@@ -43,24 +48,27 @@ and `--yes` to skip prompts. Release assets are named
 
 | Method | How |
 | --- | --- |
-| Go toolchain | `go install github.com/ruddro-roy/sindook/cmd/sindook@latest` (Go 1.26+) |
+| Go toolchain | `go install github.com/ruddro-roy/sindook/cmd/sindook@v0.7.0` (Go 1.26.6+) |
 | macOS / Linux installer | `curl -fsSLO https://raw.githubusercontent.com/ruddro-roy/sindook/main/scripts/install.sh && sh install.sh` |
 | Windows installer | Download `scripts/install.ps1` from the repository and run it in PowerShell |
 | Homebrew | `brew install --formula packaging/homebrew/sindook.rb` from this checkout, or publish `packaging/homebrew` as a tap |
 | Scoop | `scoop install .\packaging\scoop\sindook.json` from this checkout, or publish `packaging/scoop` as a bucket |
-| winget | `winget install ruddro-roy.sindook` once `packaging/winget/manifests/r/ruddro-roy/sindook/0.6.0/sindook.yaml` is published to winget-pkgs |
+| winget | `winget install ruddro-roy.sindook` once `packaging/winget/manifests/r/ruddro-roy/sindook/0.7.0/` is published to winget-pkgs |
 | Docker | `docker build .` from this checkout; the image is minimal distroless and runs `sindook` as its entrypoint |
 | Source | `git clone` and `go build ./cmd/sindook` |
 
-The Homebrew, Scoop, and winget manifests are prepared for the next release
-with `sha256` placeholders that must be filled when the release is published;
-see [docs/RELEASING.md](docs/RELEASING.md).
+The Homebrew, Scoop, and winget manifests carry the published release's
+SHA-256 checksums (v0.7.0 at the time of writing). For each new release
+the hashes are refreshed from the release's `checksums.txt` by
+`scripts/fill-package-hashes.sh`; see [docs/RELEASING.md](docs/RELEASING.md).
 
-Requires Go 1.26 or newer when installing from source. A minimal distroless
-container image builds from the included Dockerfile.
+Requires Go 1.26.6 or newer when installing from source. A minimal
+distroless container image builds from the included Dockerfile.
 
-Release binaries for Linux, macOS, and Windows carry an SBOM, a cosign keyless signature, and GitHub build provenance. Verify before use:
+Release binaries for Linux, macOS, and Windows carry an SBOM, a cosign
+keyless signature, and GitHub build provenance. Verify before use:
 
+    shasum -a 256 -c checksums.txt
     cosign verify-blob checksums.txt --bundle checksums.txt.sigstore.json \
       --certificate-identity-regexp 'github.com/ruddro-roy/sindook' \
       --certificate-oidc-issuer https://token.actions.githubusercontent.com
@@ -71,6 +79,31 @@ Compatibility policy and tested file-format support: [docs/COMPATIBILITY.md](doc
 On Windows, an unsigned release can trigger SmartScreen. Verify the archive
 before overriding a platform warning; macOS Gatekeeper/notarization support
 will require a future Developer ID signing process.
+
+### Upgrading from v0.6.0
+
+Upgrades are drop-in: the sealed-file format (v2), the configuration schema
+(v1), and identity and contact files are unchanged. Replace the binary and
+run `sindook doctor` and `sindook selftest`; no re-encryption, rewrap, or
+re-import is needed. Files sealed by v0.6.0 are pinned as test fixtures, so
+every release is proven to open them.
+
+### Known limitations
+
+- No independent security audit yet; the file format and key-management
+  design are unaudited until an external review is completed.
+- `shred` cannot defeat SSD wear leveling, journaling, snapshots, or copies
+  an attacker already made.
+- Memory locking is best-effort: on macOS and under low `RLIMIT_MEMLOCK`,
+  key material may reach swap.
+- Fast `rewrap` is not retroactive revocation; only `-deep` rotates the
+  file key of the replacement.
+- No guaranteed secret zeroization in Go; see the threat model.
+- No full-disk encryption, hidden volumes, deniability, or recipient
+  anonymity.
+
+See [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md) for the complete product
+contract, including supported platforms and what pre-1.0 means for users.
 
 ## Use
 
@@ -169,11 +202,11 @@ verification, streams, and recovery.
 | `0` | success |
 | `1` | operational failure (I/O error, malformed input, validation, or payload corruption) |
 | `2` | usage error (unknown command or flag, missing operand, malformed credential on the command line) |
-| `3` | authentication failure (wrong identity or passphrase, missing credential, header tampering — added in 0.6.0, previously `1`) |
+| `3` | authentication failure (wrong identity or passphrase, missing credential, header tampering — historical note: split from `1` in v0.6.0) |
 
 Machine-facing output (`-json`, exit codes) is stable within a major version;
-see [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md) for the 0.6.0 `3` split and
-[docs/USER_GUIDE.md#troubleshooting](docs/USER_GUIDE.md#troubleshooting) for memory-lock diagnostics.
+see [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md) for the exit-code contract
+and [docs/USER_GUIDE.md#troubleshooting](docs/USER_GUIDE.md#troubleshooting) for memory-lock diagnostics.
 
 ## Design
 
@@ -201,6 +234,7 @@ The `interop` module cross-tests the X-Wing implementation against Cloudflare's 
 - [Format specification](docs/FORMAT.md) and [compatibility promise](docs/COMPATIBILITY.md)
 - [Release process](docs/RELEASING.md)
 - [Roadmap](docs/ROADMAP.md)
+- [Changelog](docs/CHANGELOG.md) and [v1 readiness](docs/V1_READINESS.md)
 - [Contributing](CONTRIBUTING.md)
 
 ## Non-goals

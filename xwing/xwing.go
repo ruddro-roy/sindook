@@ -18,6 +18,7 @@ import (
 	"crypto/rand"
 	"crypto/sha3"
 	"errors"
+	"sync"
 
 	"github.com/ruddro-roy/sindook/internal/memguard"
 )
@@ -34,11 +35,23 @@ var xwingLabel = []byte{0x5c, 0x2e, 0x2f, 0x2f, 0x5e, 0x5c}
 
 // PrivateKey is an expanded X-Wing decapsulation key. The 32-byte seed is
 // the canonical secret; everything else is derived from it.
+//
+// # Concurrency
+//
+// All methods are safe for concurrent use. The mutex mu guards every mutable
+// piece of key state: the seed, the expanded ML-KEM and X25519 keys, and the
+// wiped flag. Decapsulate holds mu for its entire crypto operation, so
+// concurrent Decapsulate calls on the same key serialize, and Wipe cannot
+// interleave with an in-flight decapsulation. pub is written only during
+// construction and is never modified afterwards, so PublicKey reads it
+// without taking the mutex.
 type PrivateKey struct {
-	seed [SeedSize]byte
-	dkM  *mlkem.DecapsulationKey768
-	skX  *ecdh.PrivateKey
-	pub  []byte
+	mu    sync.Mutex
+	seed  [SeedSize]byte
+	dkM   *mlkem.DecapsulationKey768
+	skX   *ecdh.PrivateKey
+	pub   []byte
+	wiped bool
 }
 
 // NewPrivateKey expands a 32-byte seed per expandDecapsulationKey (draft section 5.2).
@@ -72,20 +85,42 @@ func GenerateKey() (*PrivateKey, error) {
 	return NewPrivateKey(seed)
 }
 
-// Seed returns a copy of the 32-byte secret seed.
+// Seed returns a copy of the 32-byte secret seed. It is safe to call
+// concurrently with any other method on the key: it takes the key's mutex
+// and copies the seed while holding it, so it never observes a partially
+// wiped seed. Once Wipe has returned, Seed returns all zeroes.
 func (k *PrivateKey) Seed() []byte {
+	k.mu.Lock()
+	defer k.mu.Unlock()
 	return append([]byte(nil), k.seed[:]...)
 }
 
 // PublicKey returns a copy of the 1216-byte encapsulation key (pk_M || pk_X).
+// The public key contains no secret material and is written only during key
+// construction, so it is safe to read concurrently with Seed, Decapsulate,
+// and Wipe without taking the key's mutex. Wipe does not affect it.
 func (k *PrivateKey) PublicKey() []byte {
 	return append([]byte(nil), k.pub...)
 }
 
-// Wipe zeroes the secret seed in place. After Wipe the key is unusable and
-// must not be used again.
+// Wipe zeroes the secret seed in place and drops the expanded decapsulation
+// keys so nothing derived from the seed remains reachable through this key.
+//
+// Wipe is idempotent: calling it more than once is safe. It is also safe to
+// call concurrently with Seed, PublicKey, and Decapsulate. Wipe and
+// Decapsulate serialize on the key's mutex, which gives a precise
+// linearization: any Decapsulate that acquires the mutex after Wipe returns
+// observes the wiped state and returns an error, while a Decapsulate that
+// holds the mutex while Wipe waits may complete normally, because it started
+// before Wipe returned. After Wipe returns, Seed returns zeroes,
+// Decapsulate returns an error, and PublicKey still returns the public key.
 func (k *PrivateKey) Wipe() {
+	k.mu.Lock()
+	defer k.mu.Unlock()
 	memguard.Wipe(k.seed[:])
+	k.dkM = nil
+	k.skX = nil
+	k.wiped = true
 }
 
 func combiner(ssM, ssX, ctX, pkX []byte) []byte {
@@ -136,7 +171,18 @@ func Encapsulate(pub []byte) (ss, ct []byte, err error) {
 // draft's plain X25519, crypto/ecdh rejects low-order points by erroring on
 // an all-zero X25519 output; such ciphertexts are treated as invalid here,
 // which only rejects values no honest sealer produces.
+//
+// Decapsulate holds the key's mutex for its entire duration, so concurrent
+// Decapsulate calls on the same key serialize (they are never data-racy,
+// merely contended) and a call can never race with Wipe: if Wipe has already
+// completed, Decapsulate returns an error; if Decapsulate began first, it
+// runs to completion before Wipe can proceed.
 func (k *PrivateKey) Decapsulate(ct []byte) ([]byte, error) {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	if k.wiped {
+		return nil, errors.New("xwing: private key was wiped")
+	}
 	if len(ct) != CiphertextSize {
 		return nil, errors.New("xwing: ciphertext must be 1120 bytes")
 	}

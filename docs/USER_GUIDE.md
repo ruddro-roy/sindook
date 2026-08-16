@@ -51,6 +51,13 @@ sindook contacts list
 sindook seal -r @alice project-plan.pdf
 ```
 
+`contacts list` prints each contact as `@name` plus a short fingerprint:
+SHA-256 over the decoded 1216-byte public key, first 16 bytes, lowercase
+hex with a `sha256:` prefix — a 128-bit collision space. Use it to spot
+that you are looking at the contact you expect, not to authenticate a key
+(the collision resistance is 2^64). `contacts show NAME` and
+`contacts list -json` print the full public key for real comparison.
+
 `sindook paths` shows the platform-specific config location. It follows the
 normal user configuration location for each OS, and `SINDOOK_CONFIG_DIR` can
 override it for a portable installation or an isolated automation run. The
@@ -250,7 +257,11 @@ Before v0.6.0, authentication failures exited with `1`. Batch commands check eve
 
 `sindook doctor` runs `memguard.LockAll()` and reports:
 
-- `ok` on Linux/FreeBSD/Windows when pages were locked, `ok` on macOS where `mlockall` is not reachable from pure Go (hardware full-disk encryption is the mitigation).
+- `ok` on Linux/FreeBSD/Windows when pages were locked.
+- `warning` on macOS and other platforms where `mlockall` has no pure-Go
+  path (the process keeps running without locked memory; hardware
+  full-disk encryption is the mitigation). Since v0.7.0 this is reported
+  honestly as a warning instead of `ok`.
 - `warning` on Linux/FreeBSD when `RLIMIT_MEMLOCK` is too low or privileges are insufficient. Remediation: `ulimit -l unlimited` (per-shell) or raise the limit in `/etc/security/limits.conf` or the systemd unit with `LimitMEMLOCK=infinity`.
 
 ### CI OOM: `cannot allocate 67108864-byte block`

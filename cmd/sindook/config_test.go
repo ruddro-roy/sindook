@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"os"
@@ -12,6 +14,8 @@ import (
 	"time"
 
 	"golang.org/x/term"
+
+	"github.com/ruddro-roy/sindook/xwing"
 )
 
 // captureStdout redirects os.Stdout to a temp file while fn runs and returns
@@ -355,6 +359,21 @@ func TestContactsListShowRemove(t *testing.T) {
 		t.Errorf("contact report = %+v, want alice/%s", reports[0], canonicalPublicKey(pub))
 	}
 
+	out, err = captureStdout(t, func() error { return cmdContacts([]string{"list"}) })
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Expected fingerprint computed independently of contactFingerprint, so
+	// a regression in the function cannot also change the expectation.
+	sum := sha256.Sum256(pub)
+	fp := "sha256:" + hex.EncodeToString(sum[:16])
+	if want := "@alice  " + fp; !strings.Contains(out, want) {
+		t.Errorf("contacts list = %q, want it to contain %q", out, want)
+	}
+	if strings.Contains(out, pkPrefix) {
+		t.Errorf("contacts list must not print the full public key: %q", out)
+	}
+
 	out, err = captureStdout(t, func() error { return cmdContacts([]string{"show", "ALICE"}) })
 	if err != nil {
 		t.Fatal(err)
@@ -550,5 +569,47 @@ func TestSaveSindookConfigPermissions(t *testing.T) {
 	}
 	if got := loaded.Contacts["alice"].AddedAt; got != cfg.Contacts["alice"].AddedAt {
 		t.Errorf("saved contact added_at = %q, want %q", got, cfg.Contacts["alice"].AddedAt)
+	}
+}
+
+// TestContactFingerprintFixedVector pins the fingerprint algorithm against
+// an independently computed fixed value:
+//
+//	SHA-256 over the decoded 1216-byte X-Wing public key, first 16 bytes,
+//	lowercase hex, prefixed "sha256:" — a 128-bit collision space.
+//
+// The literal below was computed from the deterministic identity with seed
+// 7f9c2ba4e88f827d616045507605853ed73b8093f6efbc88eb1a6eacfa66ef26 (the
+// same seed as the internal/box v1 golden fixtures), verified by hand with
+// "printf 'PK' | openssl dgst -sha256" style tooling. The inline
+// crypto/sha256.Sum256 call goes straight to the standard library and does
+// not share code with contactFingerprint, so the test cannot validate a
+// bug against itself.
+func TestContactFingerprintFixedVector(t *testing.T) {
+	const (
+		seedHex          = "7f9c2ba4e88f827d616045507605853ed73b8093f6efbc88eb1a6eacfa66ef26"
+		fingerprintFixed = "sha256:2e816deebcd76c5c80d0cd2d17447887"
+	)
+	seed, err := hex.DecodeString(seedHex)
+	if err != nil {
+		t.Fatal(err)
+	}
+	key, err := xwing.NewPrivateKey(seed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pub := key.PublicKey()
+	if len(pub) != 1216 {
+		t.Fatalf("decoded public key length = %d, want 1216", len(pub))
+	}
+	sum := sha256.Sum256(pub)
+	if got := "sha256:" + hex.EncodeToString(sum[:16]); got != fingerprintFixed {
+		t.Fatalf("independently computed fingerprint = %q, fixed vector %q is stale", got, fingerprintFixed)
+	}
+	if got := contactFingerprint(pub); got != fingerprintFixed {
+		t.Errorf("contactFingerprint = %q, want %q", got, fingerprintFixed)
+	}
+	if len(fingerprintFixed) != len("sha256:")+32 {
+		t.Errorf("fingerprint length = %d hex chars, want 32 (128 bits)", len(fingerprintFixed)-len("sha256:"))
 	}
 }

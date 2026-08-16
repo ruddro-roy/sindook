@@ -117,6 +117,10 @@ expected=$(awk -v file="$asset" '$2 == file || $2 == "*" file { print $1; exit }
 	printf 'sindook installer: %s was not listed in checksums.txt\n' "$asset" >&2
 	exit 1
 }
+printf '%s' "$expected" | grep -Eq '^[0-9a-fA-F]{64}$' || {
+	printf 'sindook installer: malformed checksum entry for %s in checksums.txt\n' "$asset" >&2
+	exit 1
+}
 if command -v shasum >/dev/null 2>&1; then
 	actual=$(shasum -a 256 "$archive" | awk '{print $1}')
 elif command -v sha256sum >/dev/null 2>&1; then
@@ -141,7 +145,7 @@ if command -v cosign >/dev/null 2>&1; then
 	if curl -fsSL --retry 3 -o "$tmpdir/checksums.txt.sigstore.json" \
 			"$download_base/checksums.txt.sigstore.json" \
 		&& cosign verify-blob "$checksums" --bundle "$tmpdir/checksums.txt.sigstore.json" \
-			--certificate-identity-regexp 'github.com/ruddro-roy/sindook' \
+			--certificate-identity-regexp '^https://github.com/ruddro-roy/sindook/.github/workflows/release.yml@refs/tags/.*$' \
 			--certificate-oidc-issuer https://token.actions.githubusercontent.com \
 			> "$tmpdir/cosign.log" 2>&1; then
 		printf 'cosign verification succeeded.\n'

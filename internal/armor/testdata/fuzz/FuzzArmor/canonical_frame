@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("-----BEGIN SINDOOK ENCRYPTED FILE-----\naGVsbG8gc2luZG9vaw==\n-----END SINDOOK ENCRYPTED FILE-----\n")

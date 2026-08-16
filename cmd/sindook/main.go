@@ -6,7 +6,9 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"regexp"
 	"runtime/debug"
+	"strings"
 
 	"github.com/ruddro-roy/sindook/internal/box"
 	"github.com/ruddro-roy/sindook/internal/memguard"
@@ -18,9 +20,13 @@ const (
 	ext      = ".sindook"
 )
 
-// version is the source-tree default; releases override it via
-// -X main.version so tagged binaries always report their tag.
-var version = "0.6.0-dev"
+// version is the source-tree development default. buildVersion resolves
+// the reported version in this order: (1) a linker override via
+// -X main.version, which release builds set to the exact tag; (2) the
+// module version carried in the binary's build info when it is a real
+// release tag, as produced by "go install ...@v0.7.0"; (3) this dev
+// default, so source-tree builds stay visibly unreleased.
+var version = "0.7.0-dev"
 
 const usageMain = `sindook seals files with hybrid X25519 + ML-KEM-768 recipient slots
 and can rotate access without decrypting or re-encrypting the payload in
@@ -153,11 +159,11 @@ func newFlagSet(name, usage string) *flag.FlagSet {
 // buildVersion appends VCS provenance when the binary was built from a
 // checkout, so bug reports identify the exact commit.
 func buildVersion() string {
-	v := "sindook " + version
 	bi, ok := debug.ReadBuildInfo()
 	if !ok {
-		return v
+		return "sindook " + version
 	}
+	v := "sindook " + resolveVersion(version, bi)
 	var rev, at string
 	dirty := false
 	for _, s := range bi.Settings {
@@ -183,4 +189,23 @@ func buildVersion() string {
 		rev += ", " + at
 	}
 	return v + " (" + rev + ")"
+}
+
+// releaseTagPattern matches module versions that are real release tags:
+// major.minor.patch with an optional rc/beta/alpha/pre prerelease suffix,
+// case-insensitive on the suffix. Pseudo-versions (v0.0.0-20240101...-abc)
+// and "(devel)" deliberately do not match, so only tagged builds report a
+// release version when no -X main.version override was supplied.
+var releaseTagPattern = regexp.MustCompile(`^v?[0-9]+\.[0-9]+\.[0-9]+(-(?i:rc|beta|alpha|pre)[0-9]*)?$`)
+
+// resolveVersion picks the base version string for buildVersion. It is
+// pure so tests can exercise the resolution table directly.
+func resolveVersion(devDefault string, bi *debug.BuildInfo) string {
+	if bi == nil || bi.Main.Version == "" || bi.Main.Version == "(devel)" {
+		return devDefault
+	}
+	if !releaseTagPattern.MatchString(bi.Main.Version) {
+		return devDefault
+	}
+	return strings.TrimPrefix(bi.Main.Version, "v")
 }

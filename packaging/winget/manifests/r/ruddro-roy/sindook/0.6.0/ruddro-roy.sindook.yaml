@@ -1,0 +1,10 @@
+# Created with winget-create or manually authored; mirrors the accepted
+# zip + nested portable pattern from microsoft/winget-pkgs (ManifestVersion
+# 1.12.0, e.g. Derailed.k9s).
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.version.1.12.0.schema.json
+
+PackageIdentifier: ruddro-roy.sindook
+PackageVersion: 0.6.0
+DefaultLocale: en-US
+ManifestType: version
+ManifestVersion: 1.12.0

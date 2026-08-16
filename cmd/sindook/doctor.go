@@ -69,6 +69,10 @@ func (r *doctorReport) add(name, status, detail, remediation string) {
 	}
 }
 
+// lockAll is memguard.LockAll by default; tests swap it for a stub to
+// exercise the memory-lock diagnostic paths deterministically.
+var lockAll = memguard.LockAll
+
 func cmdDoctor(args []string) error {
 	fs := newFlagSet("doctor", usageDoctor)
 	jsonOut := fs.Bool("json", false, "")
@@ -83,8 +87,8 @@ func cmdDoctor(args []string) error {
 		Platform: runtime.GOOS + "/" + runtime.GOARCH,
 		Checks:   make([]doctorCheck, 0, 6),
 	}
-	if err := memguard.LockAll(); errors.Is(err, memguard.ErrUnsupported) {
-		report.add("memory lock", "ok", "memory locking is not supported on this platform via pure Go; key material may be written to swap (use full-disk encryption)", "")
+	if err := lockAll(); errors.Is(err, memguard.ErrUnsupported) {
+		report.add("memory lock", "warning", "memory locking is not supported on this platform via pure Go; key material may be written to swap", "use full-disk encryption")
 	} else if err != nil {
 		report.add("memory lock", "warning", err.Error(), "raise RLIMIT_MEMLOCK with 'ulimit -l unlimited' or run with more privileges so key material is not written to swap (see docs/USER_GUIDE.md#troubleshooting)")
 	} else {
@@ -216,7 +220,7 @@ func checkDoctorConfig(report *doctorReport) {
 		report.add("identity permissions", "warning", warning, "restrict the identity file to your account")
 	}
 	if _, err := os.Stat(cfg.DefaultIdentity + ".pub"); err != nil {
-		report.add("default public key", "warning", "cannot access "+cfg.DefaultIdentity+".pub: "+err.Error(), "recreate the public key with sindook pubkey -i @default > IDENTITY.pub")
+		report.add("default public key", "warning", "cannot access "+cfg.DefaultIdentity+".pub: "+err.Error(), "recreate the public key with sindook pubkey @default > IDENTITY.pub")
 	}
 	report.add("default identity", "ok", cfg.DefaultIdentity, "")
 }

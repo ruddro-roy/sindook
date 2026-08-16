@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_call:
 
 permissions:
   contents: read
@@ -101,7 +102,7 @@ jobs:
             go.sum
             interop/go.sum
       - name: cache fuzz corpora
-        uses: actions/cache@v4 # v4.3.0
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: |
             internal/box/testdata/fuzz
@@ -122,6 +123,27 @@ jobs:
       - name: vet
         timeout-minutes: 5
         run: go vet ./...
+      - name: whitespace check
+        timeout-minutes: 2
+        run: |
+          # The checkout in CI is always a clean tree, so this detects
+          # whitespace errors introduced by the change under test.
+          git diff --check
+          if grep -RIn --include='*.go' -E '[[:blank:]]+$' .; then
+            echo "::error::trailing whitespace found in Go sources"
+            exit 1
+          fi
+      - name: version consistency
+        timeout-minutes: 2
+        run: |
+          # scripts/check-version-consistency.sh derives the expected
+          # version from the source-tree dev default and verifies that
+          # man pages, packaging manifests and install scripts agree.
+          if [ ! -f scripts/check-version-consistency.sh ]; then
+            echo "::error::scripts/check-version-consistency.sh not found"
+            exit 1
+          fi
+          bash scripts/check-version-consistency.sh
       - name: cross-compile
         timeout-minutes: 5
         run: |
@@ -131,6 +153,10 @@ jobs:
               echo "==> building for ${goos}/${goarch}"
               CGO_ENABLED=0 GOOS="${goos}" GOARCH="${goarch}" go build ./...
             done
+          done
+          for goos in linux windows; do
+            echo "==> building for ${goos}/386"
+            CGO_ENABLED=0 GOOS="${goos}" GOARCH="386" go build ./...
           done
       - name: fuzz smoke
         timeout-minutes: 10

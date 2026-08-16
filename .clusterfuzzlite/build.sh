@@ -6,3 +6,6 @@ compile_native_go_fuzzer github.com/ruddro-roy/sindook/internal/box FuzzSealOpen
 compile_native_go_fuzzer github.com/ruddro-roy/sindook/internal/box FuzzBitFlip fuzz_box_bit_flip
 compile_native_go_fuzzer github.com/ruddro-roy/sindook/internal/armor FuzzArmor fuzz_armor
 compile_native_go_fuzzer github.com/ruddro-roy/sindook/xwing FuzzDecapsulate fuzz_xwing_decapsulate
+compile_native_go_fuzzer github.com/ruddro-roy/sindook/xwing FuzzEncapsulate fuzz_xwing_encapsulate
+compile_native_go_fuzzer github.com/ruddro-roy/sindook/xwing FuzzNewPrivateKey fuzz_xwing_new_private_key
+compile_native_go_fuzzer github.com/ruddro-roy/sindook/xwing FuzzDecapsulateRandomIdentity fuzz_xwing_decapsulate_random_identity

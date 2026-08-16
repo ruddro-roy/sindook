@@ -4,6 +4,12 @@ version: 2
 
 project_name: sindook
 
+# The GitHub release is created as a DRAFT. The release workflow's verify job
+# re-checks the staged artifacts and only then promotes the draft to public,
+# so a release can never be published without passing every gate.
+release:
+  draft: true
+
 builds:
   - main: ./cmd/sindook
     env:

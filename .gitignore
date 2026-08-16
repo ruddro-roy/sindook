@@ -5,3 +5,9 @@
 !internal/box/testdata/*.sindook
 coverage.out
 dist/
+work/
+work/*
+COORDINATOR_STATUS.md
+FILE_OWNERS.md
+*.tmp
+*.temp

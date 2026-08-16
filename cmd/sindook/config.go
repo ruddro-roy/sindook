@@ -1,7 +1,9 @@
 package main
 
 import (
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -202,6 +204,14 @@ func canonicalPublicKey(pub []byte) string {
 	return pkPrefix + base64.RawStdEncoding.EncodeToString(pub)
 }
 
+// contactFingerprint returns the short key fingerprint shown by
+// "contacts list": the first 16 bytes of SHA-256 over the decoded public
+// key, hex-encoded. "contacts show" and -json output carry the full key.
+func contactFingerprint(pub []byte) string {
+	sum := sha256.Sum256(pub)
+	return "sha256:" + hex.EncodeToString(sum[:16])
+}
+
 func loadContact(name string) ([]byte, error) {
 	normalized, err := normalizeContactName(name)
 	if err != nil {
@@ -328,7 +338,8 @@ const usageContacts = `usage: sindook contacts [list [-json] | add [-f] NAME PUB
 Save shareable recipient public keys under portable, case-insensitive names.
 Use a saved contact anywhere a recipient is accepted: -r @alice. The config
 file contains public keys and an optional default identity path only; it never
-contains private keys or passphrases.
+contains private keys or passphrases. list prints short sha256 fingerprints;
+use show NAME or -json for full public keys.
 
 examples:
   sindook contacts add alice alice.key.pub
@@ -398,7 +409,12 @@ func cmdContactsList(args []string) error {
 		return nil
 	}
 	for _, report := range reports {
-		fmt.Printf("@%s  %s\n", report.Name, report.PublicKey)
+		pub, err := parseSavedPublicKey(report.PublicKey)
+		if err != nil {
+			fmt.Printf("@%s  (invalid key)\n", report.Name)
+			continue
+		}
+		fmt.Printf("@%s  %s\n", report.Name, contactFingerprint(pub))
 	}
 	return nil
 }

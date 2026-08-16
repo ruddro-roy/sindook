@@ -14,6 +14,11 @@ param(
 
 # -Yes is accepted for scripted runs; the installer never prompts today.
 $ErrorActionPreference = 'Stop'
+Set-StrictMode -Version 2.0
+
+# GitHub requires TLS 1.2 or newer; PowerShell 5.1 defaults may negotiate
+# older protocols. Add Tls12 (and higher) without removing anything else.
+[Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 
 if ([string]::IsNullOrWhiteSpace($InstallDir)) {
     $InstallDir = Join-Path $env:LOCALAPPDATA 'sindook\bin'
@@ -75,7 +80,7 @@ try {
         try {
             Invoke-WebRequest -Uri "$downloadBase/checksums.txt.sigstore.json" -OutFile $bundle
             & $cosign.Source verify-blob $checksums --bundle $bundle `
-                --certificate-identity-regexp 'github.com/ruddro-roy/sindook' `
+                --certificate-identity-regexp '^https://github.com/ruddro-roy/sindook/.github/workflows/release.yml@refs/tags/.+$' `
                 --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' | Out-Null
             if ($LASTEXITCODE -eq 0) {
                 Write-Host 'cosign verification succeeded.'
@@ -103,7 +108,7 @@ try {
     Write-Host ''
     Write-Host "Installed Sindook $tag to $target"
     $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
-    if (-not (($userPath -split ';') -contains $InstallDir)) {
+    if (-not $userPath -or -not (($userPath -split ';') -contains $InstallDir)) {
         Write-Host "Add $InstallDir to your User PATH, open a new PowerShell window, then run:"
         Write-Host '  sindook version'
     }
