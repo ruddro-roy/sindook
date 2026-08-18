@@ -21,12 +21,12 @@ a checksum, SBOM, Sigstore bundle, and GitHub build provenance.
 Install the current release from source on any supported operating system
 (Go 1.26.6+; the Go toolchain auto-downloads it if needed):
 
-    go install github.com/ruddro-roy/sindook/cmd/sindook@v0.7.0
+    go install github.com/ruddro-roy/sindook/cmd/sindook@v0.7.1
     sindook version
-    # sindook 0.7.0 — tagged installs report the exact release version
+    # sindook 0.7.1 -- tagged installs report the exact release version
 
-`@latest` also works; `@v0.7.0` pins the release. A build from a source
-checkout reports `sindook 0.7.0-dev` with commit provenance instead.
+`@latest` also works; `@v0.7.1` pins the release. A build from a source
+checkout reports `sindook 0.7.1-dev` with commit provenance instead.
 
 Or install a verified release binary without Go. From a checked-out Sindook
 source tree, run one of the included user-local installers:
@@ -48,19 +48,19 @@ and `--yes` to skip prompts. Release assets are named
 
 | Method | How |
 | --- | --- |
-| Go toolchain | `go install github.com/ruddro-roy/sindook/cmd/sindook@v0.7.0` (Go 1.26.6+) |
+| Go toolchain | `go install github.com/ruddro-roy/sindook/cmd/sindook@v0.7.1` (Go 1.26.6+) |
 | macOS / Linux installer | `curl -fsSLO https://raw.githubusercontent.com/ruddro-roy/sindook/main/scripts/install.sh && sh install.sh` |
 | Windows installer | Download `scripts/install.ps1` from the repository and run it in PowerShell |
 | Homebrew | `brew install --formula packaging/homebrew/sindook.rb` from this checkout, or publish `packaging/homebrew` as a tap |
 | Scoop | `scoop install .\packaging\scoop\sindook.json` from this checkout, or publish `packaging/scoop` as a bucket |
-| winget | `winget install ruddro-roy.sindook` once `packaging/winget/manifests/r/ruddro-roy/sindook/0.7.0/` is published to winget-pkgs |
+| winget | `winget install ruddro-roy.sindook` once `packaging/winget/manifests/r/ruddro-roy/sindook/0.7.1/` is published to winget-pkgs |
 | Docker | `docker build .` from this checkout; the image is minimal distroless and runs `sindook` as its entrypoint |
 | Source | `git clone` and `go build ./cmd/sindook` |
 
-The Homebrew, Scoop, and winget manifests carry the published release's
-SHA-256 checksums (v0.7.0 at the time of writing). For each new release
-the hashes are refreshed from the release's `checksums.txt` by
-`scripts/fill-package-hashes.sh`; see [docs/RELEASING.md](docs/RELEASING.md).
+The Homebrew, Scoop, and winget manifests carry the latest already-published
+release checksums until the next release exists. After publishing v0.7.1, run
+`scripts/fill-package-hashes.sh 0.7.1` to refresh them from the verified
+`checksums.txt`; see [docs/RELEASING.md](docs/RELEASING.md).
 
 Requires Go 1.26.6 or newer when installing from source. A minimal
 distroless container image builds from the included Dockerfile.

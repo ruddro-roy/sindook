@@ -41,7 +41,7 @@ func cmdSelftest(args []string) error {
 		}
 		return s
 	}
-	fmt.Printf("Sindook %s selftest on %s/%s\n", version, runtime.GOOS, runtime.GOARCH)
+	fmt.Printf("Sindook %s selftest on %s/%s\n", baseVersion(), runtime.GOOS, runtime.GOARCH)
 	start := time.Now()
 
 	if err := xwing.SelfTest(); err != nil {

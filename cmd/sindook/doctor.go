@@ -82,8 +82,9 @@ func cmdDoctor(args []string) error {
 		return usagef("doctor takes no positional arguments")
 	}
 
+	currentVersion := baseVersion()
 	report := doctorReport{
-		Version:  version,
+		Version:  currentVersion,
 		Platform: runtime.GOOS + "/" + runtime.GOARCH,
 		Checks:   make([]doctorCheck, 0, 6),
 	}
@@ -115,7 +116,7 @@ func cmdDoctor(args []string) error {
 			report.add("latest release", "warning", "could not check for updates: "+err.Error(), "check https://github.com/ruddro-roy/sindook/releases when online")
 		} else {
 			report.LatestRelease = latest
-			if newer, comparable := releaseIsNewer(latest, version); comparable && newer {
+			if newer, comparable := releaseIsNewer(latest, currentVersion); comparable && newer {
 				report.UpdateAvailable = true
 				report.add("latest release", "warning", "a newer release is available: "+latest, "install the newer release when convenient")
 			} else if comparable {

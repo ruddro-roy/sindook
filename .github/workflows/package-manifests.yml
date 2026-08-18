@@ -39,11 +39,12 @@ jobs:
           bash -n scripts/install.sh
           bash -n scripts/fill-package-hashes.sh
           sh -n scripts/install.sh
-      - name: fill-package-hashes.sh 0.6.0 self-test
+      - name: fill-package-hashes.sh current-version self-test
         run: |
-          scripts/fill-package-hashes.sh 0.6.0
+          current_version="$(jq -r .version packaging/scoop/sindook.json)"
+          scripts/fill-package-hashes.sh "$current_version"
           git diff --stat --exit-code -- packaging/ || {
-            echo "fill-package-hashes.sh 0.6.0 modified packaging/"
+            echo "fill-package-hashes.sh $current_version modified packaging/"
             exit 1
           }
 
@@ -52,13 +53,18 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Validate 0.6.0 manifests
-        shell: pwsh
-        run: winget validate --manifest packaging/winget/manifests/r/ruddro-roy/sindook/0.6.0
-      - name: Install 0.6.0 from local manifest
+      - name: Read package version
         shell: pwsh
         run: |
-          winget install --manifest packaging/winget/manifests/r/ruddro-roy/sindook/0.6.0 --accept-source-agreements --accept-package-agreements --silent
+          $m = Get-Content packaging/scoop/sindook.json | ConvertFrom-Json
+          "PACKAGE_VERSION=$($m.version)" | Out-File -FilePath $env:GITHUB_ENV -Append
+      - name: Validate current manifests
+        shell: pwsh
+        run: winget validate --manifest "packaging/winget/manifests/r/ruddro-roy/sindook/$env:PACKAGE_VERSION"
+      - name: Install current version from local manifest
+        shell: pwsh
+        run: |
+          winget install --manifest "packaging/winget/manifests/r/ruddro-roy/sindook/$env:PACKAGE_VERSION" --accept-source-agreements --accept-package-agreements --silent
       - name: Smoke test
         shell: pwsh
         run: |
@@ -69,14 +75,15 @@ jobs:
       - name: Uninstall
         shell: pwsh
         run: winget uninstall --id ruddro-roy.sindook --exact
-      - name: Validate 0.7.0 manifest schema
+      - name: Re-validate manifest schema
         shell: pwsh
-        run: winget validate --manifest packaging/winget/manifests/r/ruddro-roy/sindook/0.7.0
-      - name: Guard placeholder hashes
+        run: winget validate --manifest "packaging/winget/manifests/r/ruddro-roy/sindook/$env:PACKAGE_VERSION"
+      - name: Guard placeholder fields
         shell: pwsh
         run: |
-          $hits = Get-ChildItem packaging/winget -Recurse -Filter *.yaml | Select-String -Pattern '0{64}'
-          if ($hits) { Write-Error "Placeholder hashes found. Run scripts/fill-package-hashes.sh 0.7.0 after release."; exit 1 }
+          $pattern = '^\s*(InstallerSha256:\s*0{64}|ReleaseDate:\s*1970-01-01)\s*$'
+          $hits = Get-ChildItem packaging/winget -Recurse -Filter *.yaml | Select-String -Pattern $pattern
+          if ($hits) { Write-Error "Placeholder fields found. Run scripts/fill-package-hashes.sh after release."; exit 1 }
 
   scoop:
     name: scoop (windows)
@@ -106,14 +113,20 @@ jobs:
         run: |
           $env:PATH = "$env:USERPROFILE\scoop\shims;$env:PATH"
           scoop uninstall sindook
-      - name: arm64 hash verification
+      - name: Published archive hash verification
         shell: pwsh
         run: |
           $m = Get-Content packaging/scoop/sindook.json | ConvertFrom-Json
-          $expected = $m.architecture.arm64.hash.Substring('sha256:'.Length).ToLowerInvariant()
-          $zip = Join-Path $env:RUNNER_TEMP 'sindook_windows_arm64.zip'
-          # Download from manifest URL for integrity check
-          # Note: this verifies against published checksums after release
+          foreach ($arch in @('64bit', 'arm64')) {
+            $entry = $m.architecture.PSObject.Properties[$arch].Value
+            $expected = $entry.hash.Substring('sha256:'.Length).ToLowerInvariant()
+            $zip = Join-Path $env:RUNNER_TEMP "sindook_windows_$arch.zip"
+            Invoke-WebRequest -Uri $entry.url -OutFile $zip
+            $actual = (Get-FileHash -Algorithm SHA256 $zip).Hash.ToLowerInvariant()
+            if ($actual -ne $expected) {
+              throw "$arch archive hash mismatch: got $actual expected $expected"
+            }
+          }
 
   homebrew:
     name: homebrew (macos)
@@ -142,9 +155,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install
         env:
-          SINDOOK_VERSION: 0.6.0
           SINDOOK_INSTALL_DIR: ${{ runner.temp }}/sindook-bin
-        run: scripts/install.sh
+        run: |
+          current_version="$(jq -r .version packaging/scoop/sindook.json)"
+          SINDOOK_VERSION="$current_version" scripts/install.sh
       - name: Smoke test + roundtrip
         run: |
           bin="${{ runner.temp }}/sindook-bin/sindook"
@@ -166,9 +180,11 @@ jobs:
       - name: Install
         shell: pwsh
         env:
-          SINDOOK_VERSION: 0.6.0
           SINDOOK_INSTALL_DIR: ${{ runner.temp }}\sindook-bin
-        run: ./scripts/install.ps1
+        run: |
+          $m = Get-Content packaging/scoop/sindook.json | ConvertFrom-Json
+          $env:SINDOOK_VERSION = $m.version
+          ./scripts/install.ps1
       - name: Smoke test
         shell: pwsh
         run: |

@@ -24,9 +24,9 @@ const (
 // the reported version in this order: (1) a linker override via
 // -X main.version, which release builds set to the exact tag; (2) the
 // module version carried in the binary's build info when it is a real
-// release tag, as produced by "go install ...@v0.7.0"; (3) this dev
+// release tag, as produced by "go install ...@v0.7.1"; (3) this dev
 // default, so source-tree builds stay visibly unreleased.
-var version = "0.7.0-dev"
+var version = "0.7.1-dev"
 
 const usageMain = `sindook seals files with hybrid X25519 + ML-KEM-768 recipient slots
 and can rotate access without decrypting or re-encrypting the payload in
@@ -161,7 +161,7 @@ func newFlagSet(name, usage string) *flag.FlagSet {
 func buildVersion() string {
 	bi, ok := debug.ReadBuildInfo()
 	if !ok {
-		return "sindook " + version
+		return "sindook " + resolveVersion(version, nil)
 	}
 	v := "sindook " + resolveVersion(version, bi)
 	var rev, at string
@@ -191,6 +191,14 @@ func buildVersion() string {
 	return v + " (" + rev + ")"
 }
 
+func baseVersion() string {
+	bi, ok := debug.ReadBuildInfo()
+	if !ok {
+		return resolveVersion(version, nil)
+	}
+	return resolveVersion(version, bi)
+}
+
 // releaseTagPattern matches module versions that are real release tags:
 // major.minor.patch with an optional rc/beta/alpha/pre prerelease suffix,
 // case-insensitive on the suffix. Pseudo-versions (v0.0.0-20240101...-abc)
@@ -201,6 +209,9 @@ var releaseTagPattern = regexp.MustCompile(`^v?[0-9]+\.[0-9]+\.[0-9]+(-(?i:rc|be
 // resolveVersion picks the base version string for buildVersion. It is
 // pure so tests can exercise the resolution table directly.
 func resolveVersion(devDefault string, bi *debug.BuildInfo) string {
+	if releaseTagPattern.MatchString(devDefault) {
+		return strings.TrimPrefix(devDefault, "v")
+	}
 	if bi == nil || bi.Main.Version == "" || bi.Main.Version == "(devel)" {
 		return devDefault
 	}

@@ -1,8 +1,6 @@
-# Installer manifest for Sindook v0.7.0. Prepared before publication: the
-# InstallerSha256 values are placeholder zeros and ReleaseDate is the
-# obviously-wrong 1970-01-01. Run scripts/fill-package-hashes.sh 0.7.0 after
-# the release is published to replace them with real digests and today's
-# date. This file is NOT PUBLISHABLE AS-IS. See packaging/README.md.
+# Installer manifest for the published Sindook v0.7.0 release.
+# InstallerSha256 values are the SHA-256 digests from the release checksums.
+# Not yet submitted to microsoft/winget-pkgs. See packaging/README.md.
 # yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.12.0.schema.json
 
 PackageIdentifier: ruddro-roy.sindook

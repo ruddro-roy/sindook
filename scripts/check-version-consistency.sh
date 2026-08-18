@@ -67,6 +67,15 @@ version_lt() {
     }'
 }
 
+# version_manifest_url_ok FILE VERSION verifies that a package manifest's
+# literal GitHub release URLs agree with its own declared version.
+version_manifest_url_ok() {
+    file=$1
+    declared=$2
+    grep -qF "releases/download/v$declared/" "$file" || return 1
+    grep -qF "sindook_${declared}_" "$file" || return 1
+}
+
 # Every man page .TH line must name the release version.
 found=no
 for f in docs/man/*.1; do
@@ -110,9 +119,13 @@ check_scoop() {
         return
     fi
     if [ "$declared" = "$VERSION" ]; then
-        if ! grep -qF "releases/download/v$VERSION/sindook_${VERSION}_windows_amd64.zip" "$f"; then
-            fail "$f: declares $VERSION but its URLs do not reference v$VERSION"
+        if ! version_manifest_url_ok "$f" "$declared"; then
+            fail "$f: declares $declared but its URLs do not reference v$declared"
         fi
+        return
+    fi
+    if ! version_manifest_url_ok "$f" "$declared"; then
+        fail "$f: declares $declared but its URLs do not reference v$declared"
         return
     fi
     if version_lt "$declared" "$VERSION"; then
@@ -147,9 +160,43 @@ check_homebrew
 
 # winget multi-file manifests.
 check_winget() {
+    root=packaging/winget/manifests/r/ruddro-roy/sindook
+    for existing in "$root"/*; do
+        if [ ! -d "$existing" ]; then
+            continue
+        fi
+        existing_version=${existing##*/}
+        case "$existing_version" in
+            [0-9]*.[0-9]*.[0-9]*)
+                ;;
+            *)
+                continue
+                ;;
+        esac
+        for f in "$existing"/*.yaml; do
+            if [ ! -f "$f" ]; then
+                continue
+            fi
+            if ! grep -qF "PackageVersion: $existing_version" "$f"; then
+                fail "$f: PackageVersion must match directory $existing_version"
+            fi
+        done
+        installer="$existing/ruddro-roy.sindook.installer.yaml"
+        locale="$existing/ruddro-roy.sindook.locale.en-US.yaml"
+        if [ -f "$installer" ] && ! version_manifest_url_ok "$installer" "$existing_version"; then
+            fail "$installer: InstallerUrl values do not reference v$existing_version"
+        fi
+        if [ -f "$locale" ] && ! grep -qF "releases/tag/v$existing_version" "$locale"; then
+            fail "$locale: ReleaseNotesUrl does not reference v$existing_version"
+        fi
+        if [ -f "$locale" ] && ! grep -qF "blob/v$existing_version/LICENSE" "$locale"; then
+            fail "$locale: LicenseUrl does not reference v$existing_version"
+        fi
+    done
+
     d=packaging/winget/manifests/r/ruddro-roy/sindook/$VERSION
     if [ ! -d "$d" ]; then
-        note "$d does not exist yet; manifests for the release are added before tagging and hashes are filled post-publish (scripts/fill-package-hashes.sh)"
+        note "$d does not exist yet; scripts/fill-package-hashes.sh $VERSION will create it from the latest existing winget manifest after the release is published"
         return
     fi
     found=no

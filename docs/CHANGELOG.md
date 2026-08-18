@@ -5,15 +5,19 @@ All notable user-visible changes are documented here. The format follows
 uses semantic versioning. Pre-1.0 releases may change commands with a
 clear entry here, as described in [docs/COMPATIBILITY.md](COMPATIBILITY.md).
 
-## [v0.7.0] - 2026-08-16
+## [v0.7.1] - 2026-08-18
+
+This release supersedes v0.7.0 without moving the public v0.7.0 tag. It is the
+first release intended to carry the productization, version-resolution, and
+draft-first release pipeline changes below on the tagged source commit.
 
 ### Added
 
 - Version resolution via Go module build info: a binary installed with
-  `go install github.com/ruddro-roy/sindook/cmd/sindook@v0.7.0` reports
-  `sindook 0.7.0` instead of the source-tree dev default. Release builds
+  `go install github.com/ruddro-roy/sindook/cmd/sindook@v0.7.1` reports
+  `sindook 0.7.1` instead of the source-tree dev default. Release builds
   (linker-stamped) report the exact tag, and dev builds stay visibly
-  `0.7.0-dev` with commit provenance.
+  `0.7.1-dev` with commit provenance.
 - `contacts list` prints short `sha256:` fingerprints (first 16 bytes of
   SHA-256 over the decoded public key) instead of full keys; `contacts
   show NAME` and `contacts list -json` continue to print full keys.
@@ -44,16 +48,25 @@ clear entry here, as described in [docs/COMPATIBILITY.md](COMPATIBILITY.md).
   provenance before the draft is promoted to public.
 - winget packaging moved to multi-file manifests; the installers'
   checksum verification fails closed on a missing or mismatched entry.
-- Source-tree dev default bumped to `0.7.0-dev`; man pages carry
-  `sindook 0.7.0`.
+- Source-tree dev default bumped to `0.7.1-dev`; man pages carry
+  `sindook 0.7.1`.
 
 ### Fixed
 
 - `doctor` no longer suggests a `pubkey -i @default` invocation that the
   CLI would reject; the remediation uses the accepted positional form.
+- The version resolver now honors a real linker-stamped release version before
+  tagged-module build info, matching the documented release-build precedence.
+- `doctor` and `selftest` now use the same resolved version as `sindook
+  version`, so tagged module installs and linker-stamped release binaries do
+  not report a stale source-tree dev version in health output.
+- Package manifest checks now fail when a manifest declares one version but
+  points at another version's release URLs.
 
 ## Historical releases
 
+- v0.7.0: public release superseded by v0.7.1 because the immutable tag did
+  not contain the productization commit represented here.
 - v0.6.0: exit code `3` split for authentication failures, memory-lock
   downgrade below 96 MiB `RLIMIT_MEMLOCK` to avoid CI OOM, FreeBSD memory
   locking.

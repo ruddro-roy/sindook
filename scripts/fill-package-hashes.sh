@@ -113,6 +113,61 @@ replace_after() {
 
 placeholder_hash="0000000000000000000000000000000000000000000000000000000000000000"
 
+# version_lt exits 0 when the first dotted X.Y.Z triple is numerically smaller
+# than the second, 1 otherwise.
+version_lt() {
+	awk -v a="$1" -v b="$2" 'BEGIN {
+		split(a, x, "."); split(b, y, ".");
+		for (i = 1; i <= 3; i++) {
+			if (x[i] + 0 < y[i] + 0) exit 0;
+			if (x[i] + 0 > y[i] + 0) exit 1;
+		}
+		exit 1;
+	}'
+}
+
+prepare_winget_dir() {
+	local root=$1 target_version=$2 target_dir=$3
+	local latest_version="" latest_dir="" d base src f ifile
+
+	for d in "$root"/*; do
+		[ -d "$d" ] || continue
+		base=${d##*/}
+		case "$base" in
+			[0-9]*.[0-9]*.[0-9]*) ;;
+			*) continue ;;
+		esac
+		if [ -z "$latest_version" ] || version_lt "$latest_version" "$base"; then
+			latest_version=$base
+			latest_dir=$d
+		fi
+	done
+	[ -n "$latest_dir" ] || die "no existing winget manifest directory to use as a template under $root"
+
+	mkdir "$target_dir" || die "could not create $target_dir"
+	for src in "$latest_dir"/*.yaml; do
+		[ -f "$src" ] || continue
+		cp "$src" "$target_dir/${src##*/}" || die "could not copy $src"
+	done
+
+	for f in "$target_dir"/*.yaml; do
+		[ -f "$f" ] || continue
+		sed -e "s/v${latest_version}/v${target_version}/g" \
+			-e "s/${latest_version}/${target_version}/g" \
+			"$f" > "$f.tmp" || die "sed failed on $f"
+		mv "$f.tmp" "$f"
+	done
+
+	ifile="$target_dir/ruddro-roy.sindook.installer.yaml"
+	[ -f "$ifile" ] || die "$target_dir: installer manifest missing after template copy"
+	sed -e 's/^\([[:space:]]*InstallerSha256: \)[0-9a-fA-F]\{64\}.*$/\1'"$placeholder_hash"'/' \
+		-e 's/^\([[:space:]]*ReleaseDate: \).*$/\11970-01-01/' \
+		"$ifile" > "$ifile.tmp" || die "sed failed on $ifile"
+	mv "$ifile.tmp" "$ifile"
+
+	printf 'Prepared winget/%s manifests from winget/%s template.\n' "$target_version" "$latest_version"
+}
+
 # ---------------------------------------------------------------- Homebrew
 formula="$repo_dir/packaging/homebrew/sindook.rb"
 [ -f "$formula" ] || die "missing $formula"
@@ -153,12 +208,15 @@ replace_after 'sindook_[0-9][0-9.]*_windows_amd64\.zip' "$manifest" \
 	's/"hash": "sha256:[0-9a-fA-F]*"/"hash": "sha256:'"$h64"'"/'
 replace_after 'sindook_[0-9][0-9.]*_windows_arm64\.zip' "$manifest" \
 	's/"hash": "sha256:[0-9a-fA-F]*"/"hash": "sha256:'"$harm"'"/'
-sed -e 's/^\("version": "\)[^"]*/\1'"$version"'/' "$manifest" > "$manifest.tmp" &&
+sed -e 's/^\([[:space:]]*"version": "\)[^"]*/\1'"$version"'/' "$manifest" > "$manifest.tmp" &&
 	mv "$manifest.tmp" "$manifest"
 
 # -------------------------------------------------------------------- winget
-winget_dir="$repo_dir/packaging/winget/manifests/r/ruddro-roy/sindook/$version"
-[ -d "$winget_dir" ] || die "no prepared winget manifest directory for $version: $winget_dir"
+winget_root="$repo_dir/packaging/winget/manifests/r/ruddro-roy/sindook"
+winget_dir="$winget_root/$version"
+if [ ! -d "$winget_dir" ]; then
+	prepare_winget_dir "$winget_root" "$version" "$winget_dir"
+fi
 vfile="$winget_dir/ruddro-roy.sindook.yaml"
 ifile="$winget_dir/ruddro-roy.sindook.installer.yaml"
 lfile="$winget_dir/ruddro-roy.sindook.locale.en-US.yaml"
@@ -212,10 +270,10 @@ for f in "$vfile" "$ifile" "$lfile"; do
 done
 
 # --------------------------------------------- fail-closed final verification
-if grep -q "$placeholder_hash" "$formula" "$manifest" "$vfile" "$ifile" "$lfile"; then
+if grep -Eq 'sha256 "0{64}"|"hash": "sha256:0{64}"|InstallerSha256: 0{64}' "$formula" "$manifest" "$vfile" "$ifile" "$lfile"; then
 	die "an all-zero placeholder hash remains in an updated manifest"
 fi
-if grep -q '1970-01-01' "$ifile"; then
+if grep -q '^[[:space:]]*ReleaseDate: 1970-01-01' "$ifile"; then
 	die "$ifile still contains the 1970-01-01 placeholder release date"
 fi
 

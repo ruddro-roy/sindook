@@ -1,6 +1,6 @@
 {
     "##": "Scoop manifest for Sindook. The hashes are the SHA-256 digests of the published v0.7.0 archives from the release's checksums.txt. autoupdate keeps url/hash current afterward; scripts/fill-package-hashes.sh updates this manifest at release time.",
-    "version": "0.6.0",
+    "version": "0.7.0",
     "description": "Hybrid post-quantum file encryption (X-Wing: X25519 + ML-KEM-768) with key rotation built in.",
     "homepage": "https://github.com/ruddro-roy/sindook",
     "license": "Apache-2.0",

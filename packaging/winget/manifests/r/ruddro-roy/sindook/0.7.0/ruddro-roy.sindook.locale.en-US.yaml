@@ -1,7 +1,5 @@
-# Default locale manifest for Sindook v0.7.0. Prepared before publication:
-# do NOT publish until the 0.7.0 assets exist and
-# scripts/fill-package-hashes.sh 0.7.0 has filled the real installer hashes
-# and release date. See packaging/README.md.
+# Default locale manifest for the published Sindook v0.7.0 release.
+# Not yet submitted to microsoft/winget-pkgs. See packaging/README.md.
 # yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.12.0.schema.json
 
 PackageIdentifier: ruddro-roy.sindook
