@@ -95,8 +95,8 @@ published v0.7.0 release.
 - **winget schema conformance cannot be validated on macOS/Linux** — `winget
   validate` runs only in CI on `windows-latest`. The manifests were modeled
   on a current accepted winget-pkgs zip + nested-portable manifest
-  (Derailed.k9s, June 2026) at ManifestVersion 1.12.0. `PortableCommandAlias:
-  sindook` is schema-valid per the official 1.12.0 installer schema (only
+  (Derailed.k9s, June 2026) at ManifestVersion 1.6.0. `PortableCommandAlias:
+  sindook` is schema-valid per the official 1.6.0 installer schema (only
   when `NestedInstallerType: portable`), though current winget-pkgs
   manifests rarely use it; omitting it would also work because the alias
   then defaults to the exe name.
