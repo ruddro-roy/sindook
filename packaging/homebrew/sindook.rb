@@ -56,7 +56,7 @@ class Sindook < Formula
   end
 
   test do
-    assert_match(/^sindook #{Regexp.escape(version)}/, shell_output("#{bin/'sindook'} version"))
+    assert_match(/^sindook #{Regexp.escape(version)}/, shell_output("#{bin/"sindook"} version"))
     system bin/"sindook", "selftest"
   end
 end
