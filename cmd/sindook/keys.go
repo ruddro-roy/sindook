@@ -328,10 +328,18 @@ func buildSealOptions(recipients, recipientFiles []string, withPassphrase bool, 
 }
 
 // loadCredentials resolves the identity and passphrase used for opening.
+// With neither given, the identity selected by sindook init is used when one
+// exists, so the common case after init is just "sindook open FILE.sindook".
 func loadCredentials(idPath string, usePass bool, passfile, identityPassfile, passLabel string) (*xwing.PrivateKey, []byte, error) {
 	usePass = usePass || passfile != ""
 	if idPath == "" && !usePass {
-		return nil, nil, usagef("provide -i IDENTITY, -p, or -passfile")
+		if path, ok := defaultIdentityIfReady(); ok {
+			idPath = "@default"
+			fmt.Fprintf(os.Stderr, "using your default identity: %s\n", path)
+		}
+	}
+	if idPath == "" && !usePass {
+		return nil, nil, usagef("provide -i IDENTITY, -p, or -passfile; after sindook init, your default identity is used automatically")
 	}
 	var id *xwing.PrivateKey
 	if idPath != "" {

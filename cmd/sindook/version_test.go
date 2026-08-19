@@ -148,12 +148,12 @@ func TestBuildVersionLinkerStamp(t *testing.T) {
 
 // TestBuildVersionDevDefault builds the real binary with no linker flags
 // from this source tree and requires "sindook version" to report the
-// 0.7.1-dev default plus VCS provenance. This is the developer-build path.
+// source-tree dev default plus VCS provenance. This is the developer-build path.
 func TestBuildVersionDevDefault(t *testing.T) {
 	bin := buildTestBinary(t, t.TempDir(), "")
 	got := runBinaryVersion(t, bin)
-	if !strings.HasPrefix(got, "sindook 0.7.1-dev") {
-		t.Errorf("dev build version output = %q, want prefix %q", got, "sindook 0.7.1-dev")
+	if want := "sindook " + version; !strings.HasPrefix(got, want) {
+		t.Errorf("dev build version output = %q, want prefix %q", got, want)
 	}
 }
 

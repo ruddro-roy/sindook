@@ -2,18 +2,24 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"io"
+	"os"
 
 	"github.com/ruddro-roy/sindook/internal/armor"
 	"github.com/ruddro-roy/sindook/internal/box"
 )
 
 const usageSeal = `usage: sindook seal [-r RECIPIENT]... [-R FILE]... [-p | -passfile FILE]
-                    [-glob PATTERN]... [-a] [-o OUT] [-f] [FILE...]
+                    [-z] [-glob PATTERN]... [-a] [-o OUT] [-f] [FILE...]
 
 Seal files to recipients and/or a passphrase. Every recipient and
 passphrase becomes a key slot; any one of them opens the file. Each FILE
 becomes FILE.sindook; with no FILE, stdin is sealed to stdout.
+
+When no recipient and no passphrase is given, the file is sealed to the
+identity selected by sindook init. After sindook init, sealing to
+yourself needs no flags at all.
 
 flags:
   -r RECIPIENT    key file or literal sindookpk1: string, repeatable
@@ -21,16 +27,17 @@ flags:
                   (blank lines and # comments are skipped)
   -p              add a passphrase slot, prompted at the terminal
   -passfile FILE  read the passphrase from FILE instead, implies -p
+  -z              compress before encrypting, then open with -z
   -glob PATTERN    add files matched by a portable filesystem pattern
   -a              armor: ASCII output that survives email and copy-paste
   -o OUT          output path, - for stdout (single FILE only)
   -f              overwrite existing output
 
 examples:
-  sindook seal -r my.key.pub report.pdf
+  sindook seal report.pdf
+  sindook seal -z photos.tar
   sindook seal -r alice.pub -r bob.pub -p budget.xlsx
   sindook seal -R team.keys *.log
-  sindook seal -r alice.pub -glob "reports/*.pdf"
   tar cz src | sindook seal -r my.key.pub -o src.tgz.sindook
   sindook seal -r alice.pub -a -o - secret.txt | pbcopy
 `
@@ -44,10 +51,27 @@ func cmdSeal(args []string) error {
 	fs.Var(&globs, "glob", "")
 	usePass := fs.Bool("p", false, "")
 	passfile := fs.String("passfile", "", "")
+	compress := fs.Bool("z", false, "")
 	armored := fs.Bool("a", false, "")
 	out := fs.String("o", "", "")
 	force := fs.Bool("f", false, "")
 	parseInterspersedFlags(fs, args)
+
+	// With no recipient, recipient file, or passphrase at all, seal to the
+	// identity selected by sindook init when one is ready, so the common
+	// personal-backup case is just "sindook seal FILE". The notice keeps the
+	// choice visible instead of silent.
+	if len(recipients) == 0 && len(recipientFiles) == 0 && !*usePass && *passfile == "" {
+		if path, ok := defaultIdentityIfReady(); ok {
+			if _, err := os.Stat(path + ".pub"); err == nil {
+				recipients = append(recipients, "@default")
+				fmt.Fprintf(os.Stderr, "sealing to your default identity: %s\n", path)
+			}
+		}
+	}
+	if len(recipients) == 0 && len(recipientFiles) == 0 && !*usePass && *passfile == "" {
+		return usagef("provide at least one -r recipient, -R file, or -p; after sindook init, sealing to yourself needs no flags")
+	}
 
 	inputs, err := expandInputs(fs.Args(), globs)
 	if err != nil {
@@ -66,14 +90,14 @@ func cmdSeal(args []string) error {
 	}
 	var errs []error
 	for _, in := range inputs {
-		if err := sealOne(in, *out, opts, *armored, *force); err != nil {
+		if err := sealOne(in, *out, opts, *armored, *force, *compress); err != nil {
 			errs = append(errs, err)
 		}
 	}
 	return errors.Join(errs...)
 }
 
-func sealOne(inPath, outPath string, opts box.SealOptions, armored, force bool) error {
+func sealOne(inPath, outPath string, opts box.SealOptions, armored, force, compress bool) error {
 	in, name, size, err := openInput(inPath)
 	if err != nil {
 		return err
@@ -88,6 +112,9 @@ func sealOne(inPath, outPath string, opts box.SealOptions, armored, force bool) 
 		}
 	}
 	src := withProgress(in, size, "seal "+name)
+	if compress {
+		src = gzipCompress(src)
+	}
 	return withOutput(outPath, force, !armored, func(w io.Writer) error {
 		if !armored {
 			return box.Seal(w, src, opts)

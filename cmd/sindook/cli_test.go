@@ -171,12 +171,17 @@ func TestManagedContactsAndDefaultIdentity(t *testing.T) {
 	owner, ownerPub := newIdentity(t, dir, "owner.key")
 	alice, alicePub := newIdentity(t, dir, "alice.key")
 
-	// init records an explicit path. It does not make bare credential-less
-	// commands change behavior, but -i @default is now a portable opt-in.
+	// init records an explicit path and makes it the automatic default:
+	// bare credential-less commands load it, and -i @default stays portable.
 	mustRun(t, cmdInit, "-i", owner)
-	if _, _, err := loadCredentials("", false, "", "", "passphrase"); err == nil {
-		t.Fatal("bare credentials unexpectedly loaded the default identity")
+	bareID, _, err := loadCredentials("", false, "", "", "passphrase")
+	if err != nil {
+		t.Fatalf("bare credentials did not load the default identity: %v", err)
 	}
+	if bareID == nil {
+		t.Fatal("bare credentials returned no identity")
+	}
+	bareID.Wipe()
 
 	plain := write(t, filepath.Join(dir, "owner.txt"), []byte("default identity flow"))
 	mustRun(t, cmdSeal, plain, "-r", ownerPub)

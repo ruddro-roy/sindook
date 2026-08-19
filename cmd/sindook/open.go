@@ -15,11 +15,15 @@ import (
 	"github.com/ruddro-roy/sindook/xwing"
 )
 
-const usageOpen = `usage: sindook open (-i IDENTITY | -p | -passfile FILE)
-                    [-identity-passfile FILE] [-glob PATTERN]... [-o OUT] [-f] [FILE...]
+const usageOpen = `usage: sindook open [-i IDENTITY | -p | -passfile FILE]
+                    [-identity-passfile FILE] [-z] [-glob PATTERN]...
+                    [-o OUT] [-f] [FILE...]
 
 Decrypt sealed files. Armored input is detected automatically. Each
 FILE.sindook becomes FILE; with no FILE, stdin is opened to stdout.
+
+With no -i, -p, or -passfile, the identity selected by sindook init is
+used when one exists.
 
 flags:
   -i IDENTITY     identity file (prompts if passphrase-protected)
@@ -28,12 +32,14 @@ flags:
   -passfile FILE  read the passphrase from FILE instead
   -identity-passfile FILE
                   read a protected identity's passphrase from FILE
+  -z              decompress a file sealed with seal -z
   -glob PATTERN    add files matched by a portable filesystem pattern
   -o OUT          output path, - for stdout (single FILE only)
   -f              overwrite existing output
 
 examples:
-  sindook open -i my.key report.pdf.sindook
+  sindook open report.pdf.sindook
+  sindook open -z -i my.key photos.tar.sindook
   sindook open -p notes.txt.sindook
   sindook open -i my.key -o - src.tgz.sindook | tar xz
 `
@@ -44,6 +50,7 @@ func cmdOpen(args []string) error {
 	usePass := fs.Bool("p", false, "")
 	passfile := fs.String("passfile", "", "")
 	identityPassfile := fs.String("identity-passfile", "", "")
+	decompress := fs.Bool("z", false, "")
 	var globs multiFlag
 	fs.Var(&globs, "glob", "")
 	out := fs.String("o", "", "")
@@ -72,14 +79,19 @@ func cmdOpen(args []string) error {
 	}
 	var errs []error
 	for _, in := range inputs {
-		if err := openOne(in, *out, id, pass, *force); err != nil {
+		if err := openOne(in, *out, id, pass, *force, *decompress); err != nil {
+			// A wrong identity is the common failure; point passphrase-sealed
+			// files at -p instead of leaving a bare unwrap error.
+			if errors.Is(err, box.ErrWrongKey) && pass == nil {
+				err = fmt.Errorf("%w; if this file was sealed with a passphrase, add -p", err)
+			}
 			errs = append(errs, err)
 		}
 	}
 	return errors.Join(errs...)
 }
 
-func openOne(inPath, outPath string, id *xwing.PrivateKey, pass []byte, force bool) error {
+func openOne(inPath, outPath string, id *xwing.PrivateKey, pass []byte, force, decompress bool) error {
 	in, name, size, err := openInput(inPath)
 	if err != nil {
 		return err
@@ -101,17 +113,23 @@ func openOne(inPath, outPath string, id *xwing.PrivateKey, pass []byte, force bo
 		return err
 	}
 	return withOutput(outPath, force, false, func(w io.Writer) error {
-		return box.Open(w, src, id, pass)
+		if !decompress {
+			return box.Open(w, src, id, pass)
+		}
+		return withDecompression(w, func(dw io.Writer) error {
+			return box.Open(dw, src, id, pass)
+		})
 	})
 }
 
-const usageVerify = `usage: sindook verify (-i IDENTITY | -p | -passfile FILE)
+const usageVerify = `usage: sindook verify [-i IDENTITY | -p | -passfile FILE]
                       [-identity-passfile FILE] [-glob PATTERN]... [-json] [FILE...]
 
 Fully decrypt and authenticate sealed files without writing plaintext
 anywhere. Confirms a backup will actually open before you need it. Every
 file is checked even if an earlier one fails; the exit code is non-zero if
-any did.
+any did. With no credential flag, the identity selected by sindook init is
+used when one exists.
 
 flags:
   -i IDENTITY     identity file (prompts if passphrase-protected)

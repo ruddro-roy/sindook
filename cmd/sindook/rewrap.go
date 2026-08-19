@@ -13,20 +13,22 @@ import (
 	"github.com/ruddro-roy/sindook/xwing"
 )
 
-const usageRewrap = `usage: sindook rewrap (-i IDENTITY | -p | -passfile FILE)
+const usageRewrap = `usage: sindook rewrap [-i IDENTITY | -p | -passfile FILE]
                       [-identity-passfile FILE]
                       (-r RECIPIENT)... [-R FILE]...
                       [-new-passphrase | -new-passfile FILE]
                       [-glob PATTERN]... [-deep] [-o OUT] [-f] FILE...
 
-Replace the key slots of sealed files. By default fast mode preserves the
-payload ciphertext without decrypting or re-encrypting it, then copies that
-ciphertext to a replacement file with a fresh header. Fast mode does not
-revoke someone who kept a copy of the old file. -deep creates a replacement
-with a fresh file key, so removed recipients cannot open that replacement
-using the old file key. Files are staged beside their original path and
-replaced only after a successful write unless -o is given. Rotating a whole
-directory of files in one run is the intended use.
+Replace the key slots of sealed files. With no unlocking credential flag,
+the identity selected by sindook init is used when one exists. By default
+fast mode preserves the payload ciphertext without decrypting or
+re-encrypting it, then copies that ciphertext to a replacement file with a
+fresh header. Fast mode does not revoke someone who kept a copy of the old
+file. -deep creates a replacement with a fresh file key, so removed
+recipients cannot open that replacement using the old file key. Files are
+staged beside their original path and replaced only after a successful
+write unless -o is given. Rotating a whole directory of files in one run
+is the intended use.
 
 flags:
   -i IDENTITY         identity that opens the files today
@@ -88,6 +90,9 @@ func cmdRewrap(args []string) error {
 	}
 	if pass != nil {
 		defer memguard.Wipe(pass)
+	}
+	if len(recipients) == 0 && len(recipientFiles) == 0 && !*newPass && *newPassfile == "" {
+		return usagef("rewrap needs at least one new recipient (-r), recipient file (-R), or -new-passphrase")
 	}
 	opts, err := buildSealOptions(recipients, recipientFiles, *newPass, *newPassfile, "new passphrase")
 	if err != nil {
