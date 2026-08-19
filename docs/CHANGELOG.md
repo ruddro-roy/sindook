@@ -5,6 +5,50 @@ All notable user-visible changes are documented here. The format follows
 uses semantic versioning. Pre-1.0 releases may change commands with a
 clear entry here, as described in [docs/COMPATIBILITY.md](COMPATIBILITY.md).
 
+## [Unreleased]
+
+Target version: v0.8.0.
+
+### Added
+
+- One-line installs. `curl -fsSL .../scripts/install.sh | sh` on Linux and
+  macOS and `irm .../scripts/install.ps1 | iex` on Windows install the
+  latest verified release without administrator rights. Both scripts
+  read nothing from standard input or the console, so piping is safe, and
+  both still support download-and-run with `--version` pinning.
+- Compression: `sindook seal -z` compresses with gzip before encrypting
+  and `sindook open -z` reverses it. A 1.5 MB server log seals to a few
+  kilobytes. Armor, rewrap, and verify all work on compressed files
+  unchanged. The sealed-file format is unchanged; compression wraps the
+  plaintext above the encryption layer, so nothing about the content is
+  revealed beyond the compressed length. Opening a compressed file
+  without `-z` writes the raw gzip stream, and opening an uncompressed
+  file with `-z` fails with a message that names the flag.
+- Default identity in daily commands. After `sindook init`, `seal`,
+  `open`, `verify`, and `rewrap` use that identity automatically when no
+  credential flag is given, printing which identity they used. Explicit
+  `-i`, `-r`, `-p`, and `-passfile` flags keep their exact prior meaning,
+  and `SINDOOK_CONFIG_DIR` pointed at an empty directory restores the old
+  fail-closed behavior for scripts that need it.
+- First-run hints. Missing-credential errors now teach the next command
+  (`sindook init`), `open` with the wrong identity on a recipient file
+  appends a `-p` suggestion, and `rewrap` without new slots names the
+  flags that add them.
+
+### Changed
+
+- README rewritten around a three-command quickstart with the one-line
+  install first, a when-to-use section, and a comparison against age and
+  GPG. Documentation wording reviewed: no em dashes, no author name.
+- Man pages updated for `-z`, the credential defaults, and the new
+  examples; dev default bumped to `0.8.0-dev`.
+
+### Fixed
+
+- The README pinned `go install ...@v0.7.1`, a release that was never
+  published (latest is v0.7.0), so the command failed for users. It now
+  pins the real latest release, v0.7.0.
+
 ## [v0.7.1] - 2026-08-18
 
 This release supersedes v0.7.0 without moving the public v0.7.0 tag. It is the

@@ -1,15 +1,18 @@
-.TH SINDOOK-REWRAP 1 "2026-08-18" "sindook 0.7.1" "User Commands"
+.TH SINDOOK-REWRAP 1 "2026-08-19" "sindook 0.8.0" "User Commands"
 .SH NAME
 sindook-rewrap \- rotate recipients, passphrases, or the file key
 .SH SYNOPSIS
 .B sindook rewrap
-(\fB\-i\fP \fIIDENTITY\fP | \fB\-p\fP | \fB\-passfile\fP \fIFILE\fP)
+[\fB\-i\fP \fIIDENTITY\fP | \fB\-p\fP | \fB\-passfile\fP \fIFILE\fP]
 [\fB\-identity-passfile\fP \fIFILE\fP] (\fB\-r\fP \fIRECIPIENT\fP)...
 [\fB\-R\fP \fIFILE\fP]... [\fB\-new-passphrase\fP |
 \fB\-new-passfile\fP \fIFILE\fP] [\fB\-glob\fP \fIPATTERN\fP]...
 [\fB\-deep\fP] [\fB\-o\fP \fIOUT\fP] [\fB\-f\fP] \fIFILE\fP...
 .SH DESCRIPTION
-Replaces the key slots of sealed files. By default fast mode preserves
+Replaces the key slots of sealed files. With no unlocking credential
+flag, the identity selected by
+.BR sindook-init (1)
+is used when one exists. By default fast mode preserves
 the payload ciphertext without decrypting or re-encrypting it, then
 copies that ciphertext to a replacement file with a fresh header.
 Fast mode does not revoke someone who kept a copy of the old file.
@@ -24,7 +27,9 @@ files to the current format in place.
 \fB\-i\fP \fIIDENTITY\fP
 identity that opens the files today; use \fB@default\fP for the
 identity selected by
-.BR sindook-init (1)
+.BR sindook-init (1) ;
+with no credential flag at all, that default identity is used when
+one exists
 .TP
 \fB\-p\fP
 open with the current passphrase (prompted)
