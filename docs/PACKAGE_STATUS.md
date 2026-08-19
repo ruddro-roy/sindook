@@ -1,8 +1,8 @@
 Package-manager publication status (truthful, as of v0.8.1 preparation):
 
-- Homebrew formula (packaging/homebrew/sindook.rb): local-only formula that
-  currently references the published v0.7.0 archives. It must be refreshed to
-  v0.8.1 with scripts/fill-package-hashes.sh after the v0.8.1 release exists.
+- Homebrew formula (packaging/homebrew/sindook.rb): published as the
+  ruddro-roy/homebrew-sindook tap. Install with
+  `brew install ruddro-roy/sindook/sindook`. Refreshed to v0.8.1.
   Not submitted to upstream Homebrew/core.
 
 - Scoop manifest (packaging/scoop/sindook.json): local-only manifest that
