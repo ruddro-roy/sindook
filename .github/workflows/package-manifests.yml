@@ -77,7 +77,7 @@ jobs:
           & $exe selftest; if ($LASTEXITCODE -ne 0) { throw 'selftest failed' }
       - name: Uninstall
         shell: pwsh
-        run: winget uninstall --id ruddro-roy.sindook --exact
+        run: winget uninstall --id ruddro-roy.sindook --exact --disable-interactivity --accept-source-agreements
       - name: Re-validate manifest schema
         shell: pwsh
         run: winget validate --manifest "packaging/winget/manifests/r/ruddro-roy/sindook/$env:PACKAGE_VERSION"
