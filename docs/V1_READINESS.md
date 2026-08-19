@@ -6,12 +6,12 @@ that only external parties can provide (independent review, adoption,
 fuzzing history). Presence here does not create a deadline; it is the
 evidence a future 1.0 decision must be able to point at.
 
-## Completed through v0.8.0
+## Completed through v0.8.1
 
 (v0.7.1 was prepared but never tagged or published; its changes are part
-of v0.8.0. See docs/CHANGELOG.md.)
+of v0.8.1. See docs/CHANGELOG.md.)
 
-- Version resolution: release binaries and `go install @v0.8.0` report the
+- Version resolution: release binaries and `go install @v0.8.1` report the
   exact tag; source-tree builds report `0.8.0-dev` with commit provenance.
 - Concurrency-safe X-Wing key lifecycle: Wipe/Seed/Decapsulate serialize on
   a per-key mutex, Wipe is idempotent and drops expanded key material, and
@@ -29,7 +29,7 @@ of v0.8.0. See docs/CHANGELOG.md.)
 - Installer and package-manifest improvements: fail-closed installer
   checksum handling and multi-file winget manifests.
 
-## Required before v0.8.0
+## Required before v0.9.0
 
 - FreeBSD release artifacts, or an explicit decision to keep FreeBSD
   source-only (documented in docs/COMPATIBILITY.md).
@@ -78,13 +78,13 @@ of v0.8.0. See docs/CHANGELOG.md.)
 
 ## Requires external evidence rather than code changes
 
-- An independent security audit (not claimed in v0.8.0; none has been
+- An independent security audit (not claimed in v0.8.1; none has been
   performed).
 - Continuous fuzzing results from an external service.
 - Adoption metrics and user reports from parties other than the author.
 - Confirmation from the IETF process on the final X-Wing RFC status (the
   current integration targets draft-10).
 
-Nothing in v0.8.0 claims an audit, formal verification, OSS-Fuzz
+Nothing in v0.8.1 claims an audit, formal verification, OSS-Fuzz
 acceptance, perfect memory erasure, or guaranteed secure deletion. Do not
 add such claims without the evidence listed above.

@@ -148,12 +148,18 @@ func TestBuildVersionLinkerStamp(t *testing.T) {
 
 // TestBuildVersionDevDefault builds the real binary with no linker flags
 // from this source tree and requires "sindook version" to report the
-// source-tree dev default plus VCS provenance. This is the developer-build path.
+// source-tree dev default plus VCS provenance. On an untagged checkout the
+// dev default wins ("0.8.1-dev"); on a tagged checkout, which is how the
+// release CI gate runs the tests, Go's build info carries the tag and the
+// exact release version correctly wins instead. Both are the documented
+// resolution order, so both are accepted here.
 func TestBuildVersionDevDefault(t *testing.T) {
 	bin := buildTestBinary(t, t.TempDir(), "")
 	got := runBinaryVersion(t, bin)
-	if want := "sindook " + version; !strings.HasPrefix(got, want) {
-		t.Errorf("dev build version output = %q, want prefix %q", got, want)
+	tagged := "sindook " + strings.TrimSuffix(version, "-dev")
+	dev := "sindook " + version
+	if !strings.HasPrefix(got, tagged) && !strings.HasPrefix(got, dev) {
+		t.Errorf("dev build version output = %q, want prefix %q (tagged checkout) or %q (dev checkout)", got, tagged, dev)
 	}
 }
 

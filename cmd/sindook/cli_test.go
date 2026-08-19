@@ -488,7 +488,10 @@ func TestBinaryHelp(t *testing.T) {
 		{[]string{"help"}, 0, "usage: sindook <command>"},
 		{[]string{"help", "seal"}, 0, "usage: sindook seal"},
 		{[]string{"seal", "-h"}, 0, "usage: sindook seal"},
-		{[]string{"version"}, 0, "sindook " + version},
+		// On an untagged checkout the dev default is reported; on a tagged
+		// checkout (how the release CI gate runs this suite) the tag wins.
+		// Both start with the bare release version, so match on that.
+		{[]string{"version"}, 0, "sindook " + strings.TrimSuffix(version, "-dev")},
 		{[]string{"help", "doctor"}, 0, "usage: sindook doctor"},
 		{[]string{"help", "shred"}, 0, "usage: sindook shred"},
 		{[]string{"selftest"}, 0, "box tamper detection: ok"},

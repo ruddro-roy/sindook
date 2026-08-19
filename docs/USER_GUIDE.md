@@ -298,7 +298,7 @@ Before v0.6.0, authentication failures exited with `1`. Batch commands check eve
 - `ok` on Linux/FreeBSD/Windows when pages were locked.
 - `warning` on macOS and other platforms where `mlockall` has no pure-Go
   path (the process keeps running without locked memory; hardware
-  full-disk encryption is the mitigation). Since v0.8.0 this is reported
+  full-disk encryption is the mitigation). Since v0.8.1 this is reported
   honestly as a warning instead of `ok`.
 - `warning` on Linux/FreeBSD when `RLIMIT_MEMLOCK` is too low or privileges are insufficient. Remediation: `ulimit -l unlimited` (per-shell) or raise the limit in `/etc/security/limits.conf` or the systemd unit with `LimitMEMLOCK=infinity`.
 

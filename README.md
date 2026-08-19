@@ -90,7 +90,7 @@ Everything else is still one line:
 | --- | --- |
 | One-liner (macOS/Linux) | `curl -fsSL https://raw.githubusercontent.com/ruddro-roy/sindook/main/scripts/install.sh \| sh` |
 | One-liner (Windows) | `irm https://raw.githubusercontent.com/ruddro-roy/sindook/main/scripts/install.ps1 \| iex` |
-| Go toolchain | `go install github.com/ruddro-roy/sindook/cmd/sindook@v0.8.0` (Go 1.26.6+) |
+| Go toolchain | `go install github.com/ruddro-roy/sindook/cmd/sindook@v0.8.1` (Go 1.26.6+) |
 | Homebrew | `brew install --formula packaging/homebrew/sindook.rb` from this checkout, or publish `packaging/homebrew` as a tap |
 | Scoop | `scoop install .\packaging\scoop\sindook.json` from this checkout |
 | winget | `winget install ruddro-roy.sindook` once the manifest is published to winget-pkgs |

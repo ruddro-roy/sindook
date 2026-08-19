@@ -5,7 +5,7 @@ All notable user-visible changes are documented here. The format follows
 uses semantic versioning. Pre-1.0 releases may change commands with a
 clear entry here, as described in [docs/COMPATIBILITY.md](COMPATIBILITY.md).
 
-## [v0.8.0] - 2026-08-19
+## [v0.8.1] - 2026-08-19 (the first published 0.8.x release; the v0.8.0 tag exists but was never released, see below)
 
 ### Added
 
@@ -62,14 +62,24 @@ clear entry here, as described in [docs/COMPATIBILITY.md](COMPATIBILITY.md).
   credential defaults, and the new examples.
 - Corrected release history wording: v0.7.1 was prepared on main but its
   tag was never pushed and no release was published, so every v0.7.1
-  claim in the documentation was wrong. Its changes are part of v0.8.0.
+  claim in the documentation was wrong. Its changes are part of v0.8.1.
+
+## v0.8.0 (tagged, never released; use v0.8.1 or later)
+
+The v0.8.0 tag was pushed with all of the changes in v0.8.1 above, but its
+release workflow failed the CI gate before anything was published: two
+version tests expected the source-tree dev default and did not account for
+a tagged checkout, where Go's build info carries the tag and the release
+version correctly wins. Tags are immutable, so the fix and the release
+ship as v0.8.1. The v0.8.0 tag has no artifacts and must not be installed
+from; nothing about the sealed-file format differs.
 
 ## v0.7.1 (prepared, never tagged, never published)
 
 A v0.7.1 recovery release was prepared on main to supersede v0.7.0
 without moving the public v0.7.0 tag, but its tag was never pushed and no
 GitHub release exists for it. Do not reference v0.7.1 in install commands
-or documentation. The prepared changes below shipped in v0.8.0 instead:
+or documentation. The prepared changes below shipped in v0.8.1 instead:
 
 ### Added
 
