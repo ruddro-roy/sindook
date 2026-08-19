@@ -72,7 +72,7 @@ Temporary winget manifests created during the hash-fill process use
 `InstallerSha256: 000...` and `ReleaseDate: 1970-01-01` only in real manifest
 fields. The script replaces those fields before it exits successfully, and CI
 has a guard step that fails if any placeholder field remains. Homebrew/Scoop
-manifests always carry real digests; before v0.7.1 is published they track the
+manifests always carry real digests; before v0.8.0 is published they track the
 published v0.7.0 release.
 
 ## Using the manifests today

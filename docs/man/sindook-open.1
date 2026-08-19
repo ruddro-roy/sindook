@@ -4,7 +4,8 @@ sindook-open \- decrypt sealed files
 .SH SYNOPSIS
 .B sindook open
 [\fB\-i\fP \fIIDENTITY\fP | \fB\-p\fP | \fB\-passfile\fP \fIFILE\fP]
-[\fB\-identity-passfile\fP \fIFILE\fP] [\fB\-z\fP] [\fB\-glob\fP \fIPATTERN\fP]...
+[\fB\-identity-passfile\fP \fIFILE\fP] [\fB\-z\fP] [\fB\-max-decompressed\fP \fISIZE\fP]
+[\fB\-glob\fP \fIPATTERN\fP]...
 [\fB\-o\fP \fIOUT\fP] [\fB\-f\fP] [\fIFILE\fP...]
 .SH DESCRIPTION
 Decrypts sealed files. Armored input is detected automatically. Each
@@ -33,6 +34,11 @@ read a protected identity's passphrase from \fIFILE\fP
 \fB\-z\fP
 decompress a file sealed with \fBseal \-z\fP
 .TP
+\fB\-max\-decompressed\fP \fISIZE\fP
+cap the decompressed size with \fB\-z\fP against hostile archives;
+accepts \fI2G\fP, \fI512MiB\fP, or a byte count, \fB0\fP means unlimited
+(default \fB1T\fP)
+.TP
 \fB\-glob\fP \fIPATTERN\fP
 add files matched by a portable filesystem pattern, repeatable
 .TP
@@ -45,6 +51,7 @@ overwrite existing output
 .nf
 sindook open report.pdf.sindook
 sindook open -z -i my.key photos.tar.sindook
+sindook open -z -max-decompressed 10G archive.tar.sindook
 sindook open -p notes.txt.sindook
 .fi
 .SH SEE ALSO

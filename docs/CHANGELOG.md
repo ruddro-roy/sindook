@@ -5,9 +5,7 @@ All notable user-visible changes are documented here. The format follows
 uses semantic versioning. Pre-1.0 releases may change commands with a
 clear entry here, as described in [docs/COMPATIBILITY.md](COMPATIBILITY.md).
 
-## [Unreleased]
-
-Target version: v0.8.0.
+## [v0.8.0] - 2026-08-19
 
 ### Added
 
@@ -18,12 +16,18 @@ Target version: v0.8.0.
   both still support download-and-run with `--version` pinning.
 - Compression: `sindook seal -z` compresses with gzip before encrypting
   and `sindook open -z` reverses it. A 1.5 MB server log seals to a few
-  kilobytes. Armor, rewrap, and verify all work on compressed files
-  unchanged. The sealed-file format is unchanged; compression wraps the
-  plaintext above the encryption layer, so nothing about the content is
-  revealed beyond the compressed length. Opening a compressed file
-  without `-z` writes the raw gzip stream, and opening an uncompressed
-  file with `-z` fails with a message that names the flag.
+  kilobytes. Armor and rewrap work on compressed files unchanged. The
+  sealed-file format is unchanged; compression wraps the plaintext above
+  the encryption layer, so nothing about the content is revealed beyond
+  the compressed length. Opening a compressed file without `-z` writes
+  the raw gzip stream, and opening an uncompressed file with `-z` fails
+  with a message that names the flag.
+- Decompressed-size control: `open -z` and a new `verify -z` cap gzip
+  expansion at 1 TiB by default, adjustable with `-max-decompressed`
+  (accepts `2G`, `512MiB`, or a byte count; `0` means unlimited). A
+  hostile archive that tries to expand past the cap fails with a clear
+  error and no partial output is kept. `verify -z` additionally proves a
+  compressed archive is fully recoverable, gzip checksum included.
 - Default identity in daily commands. After `sindook init`, `seal`,
   `open`, `verify`, and `rewrap` use that identity automatically when no
   credential flag is given, printing which identity they used. Explicit
@@ -35,25 +39,37 @@ Target version: v0.8.0.
   appends a `-p` suggestion, and `rewrap` without new slots names the
   flags that add them.
 
+### Fixed
+
+- Decompression deadlock. `open -z` on a file whose gzip data is corrupt
+  past the 64 KiB pipe buffer blocked forever once the pipe filled,
+  because nothing closed the reader end after the decompressor stopped.
+  The reader end is now always closed on every exit path, the compressor
+  pipe is torn down when sealing fails, and a regression test fails on
+  timeout if the deadlock returns.
+- Error priority after early decompression failure: the real cause (a
+  corrupt stream or the size cap) is reported instead of the internal
+  pipe teardown error.
+- The README pinned `go install ...@v0.7.1`, a release that was never
+  published (latest was v0.7.0), so the command failed for users.
+
 ### Changed
 
 - README rewritten around a three-command quickstart with the one-line
   install first, a when-to-use section, and a comparison against age and
   GPG. Documentation wording reviewed: no em dashes, no author name.
-- Man pages updated for `-z`, the credential defaults, and the new
-  examples; dev default bumped to `0.8.0-dev`.
+- Man pages updated for `-z`, `-max-decompressed`, `verify -z`, the
+  credential defaults, and the new examples.
+- Corrected release history wording: v0.7.1 was prepared on main but its
+  tag was never pushed and no release was published, so every v0.7.1
+  claim in the documentation was wrong. Its changes are part of v0.8.0.
 
-### Fixed
+## v0.7.1 (prepared, never tagged, never published)
 
-- The README pinned `go install ...@v0.7.1`, a release that was never
-  published (latest is v0.7.0), so the command failed for users. It now
-  pins the real latest release, v0.7.0.
-
-## [v0.7.1] - 2026-08-18
-
-This release supersedes v0.7.0 without moving the public v0.7.0 tag. It is the
-first release intended to carry the productization, version-resolution, and
-draft-first release pipeline changes below on the tagged source commit.
+A v0.7.1 recovery release was prepared on main to supersede v0.7.0
+without moving the public v0.7.0 tag, but its tag was never pushed and no
+GitHub release exists for it. Do not reference v0.7.1 in install commands
+or documentation. The prepared changes below shipped in v0.8.0 instead:
 
 ### Added
 
@@ -107,10 +123,17 @@ draft-first release pipeline changes below on the tagged source commit.
 - Package manifest checks now fail when a manifest declares one version but
   points at another version's release URLs.
 
+## v0.7.0 (2026-08-16)
+
+Public release. See the
+[v0.7.0 GitHub release](https://github.com/ruddro-roy/sindook/releases/tag/v0.7.0)
+for its notes; it was superseded by v0.8.0 after a prepared v0.7.1
+recovery release turned out to have never been tagged or published.
+
 ## Historical releases
 
-- v0.7.0: public release superseded by v0.7.1 because the immutable tag did
-  not contain the productization commit represented here.
+- v0.7.0: public release; superseded by v0.8.0 (a prepared v0.7.1 was
+  never tagged or published).
 - v0.6.0: exit code `3` split for authentication failures, memory-lock
   downgrade below 96 MiB `RLIMIT_MEMLOCK` to avoid CI OOM, FreeBSD memory
   locking.

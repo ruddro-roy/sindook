@@ -15,9 +15,11 @@ import (
 	"github.com/ruddro-roy/sindook/xwing"
 )
 
+const maxDecompressedDefault = 1 << 40 // 1 TiB
+
 const usageOpen = `usage: sindook open [-i IDENTITY | -p | -passfile FILE]
-                    [-identity-passfile FILE] [-z] [-glob PATTERN]...
-                    [-o OUT] [-f] [FILE...]
+                    [-identity-passfile FILE] [-z] [-max-decompressed SIZE]
+                    [-glob PATTERN]... [-o OUT] [-f] [FILE...]
 
 Decrypt sealed files. Armored input is detected automatically. Each
 FILE.sindook becomes FILE; with no FILE, stdin is opened to stdout.
@@ -33,6 +35,10 @@ flags:
   -identity-passfile FILE
                   read a protected identity's passphrase from FILE
   -z              decompress a file sealed with seal -z
+  -max-decompressed SIZE
+                  cap the decompressed size with -z, for safety against
+                  hostile archives; accepts 2G, 512MiB, or a byte count,
+                  0 means unlimited (default 1T)
   -glob PATTERN    add files matched by a portable filesystem pattern
   -o OUT          output path, - for stdout (single FILE only)
   -f              overwrite existing output
@@ -40,8 +46,8 @@ flags:
 examples:
   sindook open report.pdf.sindook
   sindook open -z -i my.key photos.tar.sindook
+  sindook open -z -max-decompressed 10G archive.tar.sindook
   sindook open -p notes.txt.sindook
-  sindook open -i my.key -o - src.tgz.sindook | tar xz
 `
 
 func cmdOpen(args []string) error {
@@ -51,12 +57,17 @@ func cmdOpen(args []string) error {
 	passfile := fs.String("passfile", "", "")
 	identityPassfile := fs.String("identity-passfile", "", "")
 	decompress := fs.Bool("z", false, "")
+	maxDecompressed := fs.String("max-decompressed", "1T", "")
 	var globs multiFlag
 	fs.Var(&globs, "glob", "")
 	out := fs.String("o", "", "")
 	force := fs.Bool("f", false, "")
 	parseInterspersedFlags(fs, args)
 
+	limit, err := parseSize(*maxDecompressed)
+	if err != nil {
+		return err
+	}
 	inputs, err := expandInputs(fs.Args(), globs)
 	if err != nil {
 		return err
@@ -79,7 +90,7 @@ func cmdOpen(args []string) error {
 	}
 	var errs []error
 	for _, in := range inputs {
-		if err := openOne(in, *out, id, pass, *force, *decompress); err != nil {
+		if err := openOne(in, *out, id, pass, *force, *decompress, limit); err != nil {
 			// A wrong identity is the common failure; point passphrase-sealed
 			// files at -p instead of leaving a bare unwrap error.
 			if errors.Is(err, box.ErrWrongKey) && pass == nil {
@@ -91,7 +102,7 @@ func cmdOpen(args []string) error {
 	return errors.Join(errs...)
 }
 
-func openOne(inPath, outPath string, id *xwing.PrivateKey, pass []byte, force, decompress bool) error {
+func openOne(inPath, outPath string, id *xwing.PrivateKey, pass []byte, force, decompress bool, maxDecompressed int64) error {
 	in, name, size, err := openInput(inPath)
 	if err != nil {
 		return err
@@ -116,20 +127,22 @@ func openOne(inPath, outPath string, id *xwing.PrivateKey, pass []byte, force, d
 		if !decompress {
 			return box.Open(w, src, id, pass)
 		}
-		return withDecompression(w, func(dw io.Writer) error {
+		return withDecompression(w, maxDecompressed, func(dw io.Writer) error {
 			return box.Open(dw, src, id, pass)
 		})
 	})
 }
 
 const usageVerify = `usage: sindook verify [-i IDENTITY | -p | -passfile FILE]
-                      [-identity-passfile FILE] [-glob PATTERN]... [-json] [FILE...]
+                      [-identity-passfile FILE] [-z] [-max-decompressed SIZE]
+                      [-glob PATTERN]... [-json] [FILE...]
 
 Fully decrypt and authenticate sealed files without writing plaintext
 anywhere. Confirms a backup will actually open before you need it. Every
 file is checked even if an earlier one fails; the exit code is non-zero if
 any did. With no credential flag, the identity selected by sindook init is
-used when one exists.
+used when one exists. With -z, the gzip stream is also decompressed in
+memory, confirming a compressed archive is fully recoverable.
 
 flags:
   -i IDENTITY     identity file (prompts if passphrase-protected)
@@ -138,12 +151,16 @@ flags:
   -passfile FILE  read the passphrase from FILE instead
   -identity-passfile FILE
                   read a protected identity's passphrase from FILE
+  -z              also decompress files sealed with seal -z
+  -max-decompressed SIZE
+                  cap the decompressed size with -z; accepts 2G, 512MiB,
+                  or a byte count, 0 means unlimited (default 1T)
   -glob PATTERN    add files matched by a portable filesystem pattern
   -json            print one machine-readable JSON array with per-file
                   status instead of human-readable ok/FAILED lines
 
 example:
-  sindook verify -i my.key backups/*.sindook
+  sindook verify -z -i my.key backups/*.sindook
 `
 
 type verifyResult struct {
@@ -158,11 +175,17 @@ func cmdVerify(args []string) error {
 	usePass := fs.Bool("p", false, "")
 	passfile := fs.String("passfile", "", "")
 	identityPassfile := fs.String("identity-passfile", "", "")
+	decompress := fs.Bool("z", false, "")
+	maxDecompressed := fs.String("max-decompressed", "1T", "")
 	jsonOut := fs.Bool("json", false, "")
 	var globs multiFlag
 	fs.Var(&globs, "glob", "")
 	parseInterspersedFlags(fs, args)
 
+	limit, err := parseSize(*maxDecompressed)
+	if err != nil {
+		return err
+	}
 	id, pass, err := loadCredentials(*idPath, *usePass, *passfile, *identityPassfile, "passphrase")
 	if err != nil {
 		return err
@@ -183,7 +206,7 @@ func cmdVerify(args []string) error {
 	var errs []error
 	results := make([]verifyResult, 0, len(inputs))
 	for _, inPath := range inputs {
-		name, err := verifyOne(inPath, id, pass)
+		name, err := verifyOne(inPath, id, pass, *decompress, limit)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("%s: %w", name, err))
 			results = append(results, verifyResult{File: name, Status: "failed", Error: err.Error()})
@@ -209,7 +232,7 @@ func cmdVerify(args []string) error {
 	return errors.Join(errs...)
 }
 
-func verifyOne(inPath string, id *xwing.PrivateKey, pass []byte) (string, error) {
+func verifyOne(inPath string, id *xwing.PrivateKey, pass []byte, decompress bool, maxDecompressed int64) (string, error) {
 	name := inPath
 	if name == "" || name == "-" {
 		name = "stdin"
@@ -223,7 +246,12 @@ func verifyOne(inPath string, id *xwing.PrivateKey, pass []byte) (string, error)
 	if err != nil {
 		return name, err
 	}
-	return name, box.Open(io.Discard, src, id, pass)
+	if !decompress {
+		return name, box.Open(io.Discard, src, id, pass)
+	}
+	return name, withDecompression(io.Discard, maxDecompressed, func(dw io.Writer) error {
+		return box.Open(dw, src, id, pass)
+	})
 }
 
 // detectArmor sniffs the input and transparently unwraps armored files, so

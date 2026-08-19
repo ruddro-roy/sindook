@@ -1,8 +1,8 @@
 # Compatibility promise
 
-This document is the product contract for Sindook 0.7.1: what is stable,
+This document is the product contract for Sindook 0.8.0: what is stable,
 what may change, and what is explicitly not promised. It is accurate for the
-v0.7.1 release and updated on every release. Historical behavior is marked
+v0.8.0 release and updated on every release. Historical behavior is marked
 as such.
 
 ## Supported operating systems and architectures
@@ -23,18 +23,18 @@ platforms may compile from source but are not a release-support promise yet.
 ## Supported Go version
 
 `go.mod` declares `go 1.26.6`. Building from source requires Go 1.26.6 or
-newer. `go install github.com/ruddro-roy/sindook/cmd/sindook@v0.7.1` works
+newer. `go install github.com/ruddro-roy/sindook/cmd/sindook@v0.8.0` works
 with any toolchain meeting the module requirement; if the local toolchain
 is older, the Go toolchain's `GOTOOLCHAIN=auto` behavior downloads the
 required toolchain automatically. A binary installed from a release tag
 reports that tag from its module build info:
 
 ```sh
-go install github.com/ruddro-roy/sindook/cmd/sindook@v0.7.1
-sindook version   # "sindook 0.7.1"
+go install github.com/ruddro-roy/sindook/cmd/sindook@v0.8.0
+sindook version   # "sindook 0.8.0"
 ```
 
-Source-tree builds report `sindook 0.7.1-dev` plus commit provenance, and
+Source-tree builds report `sindook 0.8.0-dev` plus commit provenance, and
 release binaries built by the release workflow carry the exact tag.
 
 ## CLI
@@ -204,4 +204,4 @@ Suspected vulnerabilities go through the private reporting process in
 - Files you seal today will remain openable by later releases; compatibility fixtures and the documented format make that a test-enforced promise, not a hope.
 - CLI flags and JSON output are stable within major version 0, but commands may be added or renamed with changelog notice before 1.0. Pin scripts to the exit-code and `-json` contract.
 - No independent audit yet: treat Sindook as a young project and keep the executable, its dependencies, and your backups current. Verify a backup with `sindook verify` before you need it, and test upgrades with synthetic data first.
-- Upgrades within v0.x are drop-in: format v2 is unchanged, config schema v1 is unchanged, and identities/contacts are untouched. v0.6.0 and v0.7.0 users upgrade to v0.7.1 by replacing the binary.
+- Upgrades within v0.x are drop-in: format v2 is unchanged, config schema v1 is unchanged, and identities/contacts are untouched. v0.6.0 and v0.7.0 users upgrade to v0.8.0 by replacing the binary.

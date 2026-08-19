@@ -1,18 +1,18 @@
-Package-manager publication status (truthful, as of v0.7.1 preparation):
+Package-manager publication status (truthful, as of v0.8.0 preparation):
 
 - Homebrew formula (packaging/homebrew/sindook.rb): local-only formula that
   currently references the published v0.7.0 archives. It must be refreshed to
-  v0.7.1 with scripts/fill-package-hashes.sh after the v0.7.1 release exists.
+  v0.8.0 with scripts/fill-package-hashes.sh after the v0.8.0 release exists.
   Not submitted to upstream Homebrew/core.
 
 - Scoop manifest (packaging/scoop/sindook.json): local-only manifest that
   currently references the published v0.7.0 archives. It must be refreshed to
-  v0.7.1 with scripts/fill-package-hashes.sh after the v0.7.1 release exists.
+  v0.8.0 with scripts/fill-package-hashes.sh after the v0.8.0 release exists.
   Not submitted to Scoop/Main bucket.
 
 - Winget 0.6.0 and 0.7.0 manifests: multi-file local manifests with real
-  release URLs and hashes. The v0.7.1 winget directory is created and filled
-  by scripts/fill-package-hashes.sh 0.7.1 after the release exists.
+  release URLs and hashes. The v0.8.0 winget directory is created and filled
+  by scripts/fill-package-hashes.sh 0.8.0 after the release exists.
   Not submitted to winget-pkgs.
 
 Installation paths available:

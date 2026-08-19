@@ -112,17 +112,29 @@ func sealOne(inPath, outPath string, opts box.SealOptions, armored, force, compr
 		}
 	}
 	src := withProgress(in, size, "seal "+name)
-	if compress {
-		src = gzipCompress(src)
-	}
 	return withOutput(outPath, force, !armored, func(w io.Writer) error {
-		if !armored {
-			return box.Seal(w, src, opts)
+		// The compression pipe is created inside the writer callback so an
+		// output that never opens (an existing file without -f) never starts
+		// the compressor goroutine, and a failed seal unblocks it.
+		if !compress {
+			return sealStream(w, src, opts, armored)
 		}
-		aw := armor.NewWriter(w)
-		if err := box.Seal(aw, src, opts); err != nil {
+		cr := gzipCompress(src)
+		if err := sealStream(w, cr, opts, armored); err != nil {
+			cr.CloseWithError(err)
 			return err
 		}
-		return aw.Close()
+		return nil
 	})
+}
+
+func sealStream(w io.Writer, src io.Reader, opts box.SealOptions, armored bool) error {
+	if !armored {
+		return box.Seal(w, src, opts)
+	}
+	aw := armor.NewWriter(w)
+	if err := box.Seal(aw, src, opts); err != nil {
+		return err
+	}
+	return aw.Close()
 }

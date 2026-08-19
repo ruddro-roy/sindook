@@ -6,10 +6,13 @@ that only external parties can provide (independent review, adoption,
 fuzzing history). Presence here does not create a deadline; it is the
 evidence a future 1.0 decision must be able to point at.
 
-## Completed in v0.7.1
+## Completed through v0.8.0
 
-- Version resolution: release binaries and `go install @v0.7.1` report the
-  exact tag; source-tree builds report `0.7.1-dev` with commit provenance.
+(v0.7.1 was prepared but never tagged or published; its changes are part
+of v0.8.0. See docs/CHANGELOG.md.)
+
+- Version resolution: release binaries and `go install @v0.8.0` report the
+  exact tag; source-tree builds report `0.8.0-dev` with commit provenance.
 - Concurrency-safe X-Wing key lifecycle: Wipe/Seed/Decapsulate serialize on
   a per-key mutex, Wipe is idempotent and drops expanded key material, and
   use after Wipe fails closed.
@@ -75,13 +78,13 @@ evidence a future 1.0 decision must be able to point at.
 
 ## Requires external evidence rather than code changes
 
-- An independent security audit (not claimed in v0.7.1; none has been
+- An independent security audit (not claimed in v0.8.0; none has been
   performed).
 - Continuous fuzzing results from an external service.
 - Adoption metrics and user reports from parties other than the author.
 - Confirmation from the IETF process on the final X-Wing RFC status (the
   current integration targets draft-10).
 
-Nothing in v0.7.1 claims an audit, formal verification, OSS-Fuzz
+Nothing in v0.8.0 claims an audit, formal verification, OSS-Fuzz
 acceptance, perfect memory erasure, or guaranteed secure deletion. Do not
 add such claims without the evidence listed above.

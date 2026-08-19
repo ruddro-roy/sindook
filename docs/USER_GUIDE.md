@@ -135,11 +135,23 @@ sindook open -z photos.tar.sindook
 Logs, CSV, and tar archives shrink a lot; JPEG and ZIP files barely change.
 Compression happens before encryption, so file sizes and padding reveal
 nothing about content beyond the compressed length. `rewrap` rotates
-compressed files unchanged, `verify` authenticates them like any other
-file, and armor combines with `-z` as usual. Opening a compressed file
-without `-z` writes the raw gzip stream, which `gunzip` or a second
-`sindook open -z` still recovers; opening an uncompressed file with `-z`
-fails with a clear message instead of writing bad output.
+compressed files unchanged, `verify -z` authenticates and decompresses
+them like `open -z` would, proving the archive is fully recoverable, and
+armor combines with `-z` as usual.
+
+Decompression is bounded: `open -z` and `verify -z` refuse to expand past
+1 TiB by default, so a hostile sealed archive cannot fill the disk. Raise,
+lower, or lift the cap with `-max-decompressed`:
+
+```sh
+sindook open -z -max-decompressed 10G photos.tar.sindook
+sindook open -z -max-decompressed 0 huge-dataset.tar.sindook   # unlimited
+```
+
+Opening a compressed file without `-z` writes the raw gzip stream, which
+`gunzip` or a second `sindook open -z` still recovers; opening an
+uncompressed file with `-z` fails with a clear message instead of writing
+bad output.
 
 ## Use a passphrase slot
 
@@ -286,7 +298,7 @@ Before v0.6.0, authentication failures exited with `1`. Batch commands check eve
 - `ok` on Linux/FreeBSD/Windows when pages were locked.
 - `warning` on macOS and other platforms where `mlockall` has no pure-Go
   path (the process keeps running without locked memory; hardware
-  full-disk encryption is the mitigation). Since v0.7.1 this is reported
+  full-disk encryption is the mitigation). Since v0.8.0 this is reported
   honestly as a warning instead of `ok`.
 - `warning` on Linux/FreeBSD when `RLIMIT_MEMLOCK` is too low or privileges are insufficient. Remediation: `ulimit -l unlimited` (per-shell) or raise the limit in `/etc/security/limits.conf` or the systemd unit with `LimitMEMLOCK=infinity`.
 

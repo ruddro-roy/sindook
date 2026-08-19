@@ -4,7 +4,8 @@ sindook-verify \- confirm sealed files decrypt cleanly, writing nothing
 .SH SYNOPSIS
 .B sindook verify
 [\fB\-i\fP \fIIDENTITY\fP | \fB\-p\fP | \fB\-passfile\fP \fIFILE\fP]
-[\fB\-identity-passfile\fP \fIFILE\fP] [\fB\-glob\fP \fIPATTERN\fP]...
+[\fB\-identity-passfile\fP \fIFILE\fP] [\fB\-z\fP] [\fB\-max-decompressed\fP \fISIZE\fP]
+[\fB\-glob\fP \fIPATTERN\fP]...
 [\fIFILE\fP...]
 .SH DESCRIPTION
 Fully decrypts and authenticates sealed files without writing
@@ -13,7 +14,10 @@ needed. Every file is checked even if an earlier one fails; the exit
 code is non-zero if any did. With no credential flag, the identity
 selected by
 .BR sindook-init (1)
-is used when one exists.
+is used when one exists. With
+\fB\-z\fP,
+the gzip stream is also decompressed, confirming a compressed archive is
+fully recoverable.
 .SH OPTIONS
 .TP
 \fB\-i\fP \fIIDENTITY\fP
@@ -30,12 +34,20 @@ read the passphrase from \fIFILE\fP instead
 \fB\-identity-passfile\fP \fIFILE\fP
 read a protected identity's passphrase from \fIFILE\fP
 .TP
+\fB\-z\fP
+also decompress files sealed with \fBseal \-z\fP, checking the gzip
+stream is fully recoverable
+.TP
+\fB\-max\-decompressed\fP \fISIZE\fP
+cap the decompressed size with \fB\-z\fP; accepts \fI2G\fP, \fI512MiB\fP,
+or a byte count, \fB0\fP means unlimited (default \fB1T\fP)
+.TP
 \fB\-glob\fP \fIPATTERN\fP
 add files matched by a portable filesystem pattern, repeatable
 .SH EXAMPLES
 .nf
 sindook verify backups/*.sindook
-sindook verify -i my.key backups/*.sindook
+sindook verify -z -i my.key backups/*.sindook
 .fi
 .SH SEE ALSO
 .BR sindook (1),

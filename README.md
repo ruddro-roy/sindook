@@ -62,8 +62,9 @@ Everything else is still one line:
   or upgrade old format versions without decrypting the payload in fast
   mode. `-deep` re-encrypts under a fresh file key when someone must lose
   access to the replacement.
-- Compression built in with `seal -z` and `open -z`. A 1.5 MB server log
-  seals to a few kilobytes.
+- Compression built in with `seal -z` and `open -z`, bounded at 1 TiB of
+  expansion by default (`-max-decompressed`). A 1.5 MB server log seals
+  to a few kilobytes, and a hostile archive cannot fill the disk.
 - ASCII armor that survives email and copy-paste, stream mode for pipes,
   batch mode for whole directories, portable `-glob` for shells that do
   not expand wildcards.
@@ -89,7 +90,7 @@ Everything else is still one line:
 | --- | --- |
 | One-liner (macOS/Linux) | `curl -fsSL https://raw.githubusercontent.com/ruddro-roy/sindook/main/scripts/install.sh \| sh` |
 | One-liner (Windows) | `irm https://raw.githubusercontent.com/ruddro-roy/sindook/main/scripts/install.ps1 \| iex` |
-| Go toolchain | `go install github.com/ruddro-roy/sindook/cmd/sindook@v0.7.0` (Go 1.26.6+) |
+| Go toolchain | `go install github.com/ruddro-roy/sindook/cmd/sindook@v0.8.0` (Go 1.26.6+) |
 | Homebrew | `brew install --formula packaging/homebrew/sindook.rb` from this checkout, or publish `packaging/homebrew` as a tap |
 | Scoop | `scoop install .\packaging\scoop\sindook.json` from this checkout |
 | winget | `winget install ruddro-roy.sindook` once the manifest is published to winget-pkgs |
@@ -119,7 +120,7 @@ before overriding a platform warning.
 | Recipient keys | X25519 + ML-KEM-768 hybrid | X25519 | RSA / ECC |
 | Safe against harvest-now-decrypt-later | Yes, hybrid by default | No | No |
 | Rotate recipients without re-encrypting | Yes, `rewrap` fast mode | No | No |
-| Compression built in | Yes, `-z` | Pipe it yourself | Yes |
+| Compression built in | Yes, `-z`, with an expansion cap | Pipe it yourself | Yes |
 | Passphrase KDF | Argon2id | scrypt | iterated KDF |
 | Multi-recipient | Up to 32 slots | Yes | Yes |
 | Streams and armor | Yes | Yes | Yes |

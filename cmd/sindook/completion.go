@@ -36,9 +36,9 @@ const bashCompletion = `_sindook() {
             keygen)  opts="-o -p -passfile -f" ;;
             init)    opts="-i -o -p -passfile -identity-passfile -f" ;;
             pubkey)  opts="-identity-passfile" ;;
-            seal)    opts="-r -R -p -passfile -glob -a -o -f" ;;
-            open)    opts="-i -p -passfile -identity-passfile -glob -o -f" ;;
-            verify)  opts="-i -p -passfile -identity-passfile -glob -json" ;;
+            seal)    opts="-r -R -p -passfile -glob -a -z -o -f" ;;
+            open)    opts="-i -p -passfile -identity-passfile -glob -o -f -z -max-decompressed" ;;
+            verify)  opts="-i -p -passfile -identity-passfile -glob -json -z -max-decompressed" ;;
             inspect) opts="-json -glob" ;;
             paths)   opts="-json" ;;
 			doctor)  opts="-json -check-version" ;;
@@ -146,9 +146,9 @@ Register-ArgumentCompleter -Native -CommandName sindook -ScriptBlock {
         'keygen' { @('-o', '-p', '-passfile', '-f') }
         'init' { @('-i', '-o', '-p', '-passfile', '-identity-passfile', '-f') }
         'pubkey' { @('-identity-passfile') }
-        'seal' { @('-r', '-R', '-p', '-passfile', '-glob', '-a', '-o', '-f') }
-        'open' { @('-i', '-p', '-passfile', '-identity-passfile', '-glob', '-o', '-f') }
-        'verify' { @('-i', '-p', '-passfile', '-identity-passfile', '-glob', '-json') }
+        'seal' { @('-r', '-R', '-p', '-passfile', '-glob', '-a', '-z', '-o', '-f') }
+        'open' { @('-i', '-p', '-passfile', '-identity-passfile', '-glob', '-o', '-f', '-z', '-max-decompressed') }
+        'verify' { @('-i', '-p', '-passfile', '-identity-passfile', '-glob', '-json', '-z', '-max-decompressed') }
         'inspect' { @('-json', '-glob') }
         'paths' { @('-json') }
         'doctor' { @('-json', '-check-version') }
