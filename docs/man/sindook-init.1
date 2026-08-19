@@ -1,4 +1,4 @@
-.TH SINDOOK-INIT 1 "2026-08-18" "sindook 0.7.1" "User Commands"
+.TH SINDOOK-INIT 1 "2026-08-19" "sindook 0.8.0" "User Commands"
 .SH NAME
 sindook-init \- create or select the default sindook identity
 .SH SYNOPSIS
@@ -8,7 +8,8 @@ sindook-init \- create or select the default sindook identity
 [\fB\-f\fP]
 .SH DESCRIPTION
 Creates a first identity at an explicit path, or selects an existing
-one as the default for \fB\-i @default\fP and \fB\-r @default\fP.
+one as the default identity. After init, seal, open, verify, and
+rewrap use that identity automatically when no credential is given.
 Sindook stores only that path and public contact aliases in its
 per-user configuration; it never copies a private identity or
 passphrase into the configuration directory.
@@ -33,10 +34,10 @@ read an existing protected identity's passphrase from \fIFILE\fP
 overwrite a newly-created identity
 .SH EXAMPLES
 .nf
-sindook init -o ~/Documents/sindook-personal.key -p
+sindook init
+sindook seal report.pdf
+sindook open report.pdf.sindook
 sindook init -i ~/Documents/sindook-personal.key
-sindook seal -r @default report.pdf
-sindook open -i @default report.pdf.sindook
 .fi
 .SH SEE ALSO
 .BR sindook (1),

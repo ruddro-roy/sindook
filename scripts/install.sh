@@ -2,8 +2,9 @@
 # Install a released Sindook binary for Linux or macOS without administrator
 # privileges. The matching SHA-256 checksum is verified before installation;
 # a cosign keyless signature check runs when cosign is available (best-effort,
-# clearly announced). This script is meant to be downloaded and run directly;
-# it never pipes curl into sh.
+# clearly announced). The script reads nothing from standard input, so piping
+# it is safe: curl -fsSL <url> | sh. Downloading and running it directly works
+# the same way.
 set -eu
 
 repo="${SINDOOK_REPO:-ruddro-roy/sindook}"

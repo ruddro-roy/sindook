@@ -576,7 +576,7 @@ func TestSaveSindookConfigPermissions(t *testing.T) {
 // an independently computed fixed value:
 //
 //	SHA-256 over the decoded 1216-byte X-Wing public key, first 16 bytes,
-//	lowercase hex, prefixed "sha256:" — a 128-bit collision space.
+//	lowercase hex, prefixed "sha256:" (a 128-bit collision space).
 //
 // The literal below was computed from the deterministic identity with seed
 // 7f9c2ba4e88f827d616045507605853ed73b8093f6efbc88eb1a6eacfa66ef26 (the

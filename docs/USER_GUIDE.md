@@ -4,43 +4,51 @@ Sindook encrypts a file to one or more X-Wing recipients, a passphrase, or both.
 
 ## Install
 
-Use a signed release binary when one is available, or install from source with Go 1.26 or newer:
+The fastest way, no administrator rights needed:
+
+```sh
+# macOS or Linux
+curl -fsSL https://raw.githubusercontent.com/ruddro-roy/sindook/main/scripts/install.sh | sh
+```
+
+```powershell
+# Windows PowerShell
+irm https://raw.githubusercontent.com/ruddro-roy/sindook/main/scripts/install.ps1 | iex
+```
+
+Or install from source with Go 1.26 or newer:
 
 ```sh
 go install github.com/ruddro-roy/sindook/cmd/sindook@latest
 sindook version
 ```
 
-Tagged releases include Linux, macOS, and Windows binaries for amd64 and
-arm64. From a Sindook checkout, the user-local installers choose the matching
-release and verify its SHA-256 entry before copying the binary:
+The installers verify the release SHA-256 entry before copying the binary
+and print a PATH reminder when one is needed. Downloading them and running
+directly works too, with `--version vX.Y.Z` to pin a release. Release
+archives include checksums, an SBOM, a Sigstore bundle for `checksums.txt`,
+and GitHub build provenance. See the verification commands in the
+[README](../README.md#install) before trusting a downloaded binary.
+
+## First-time setup: init, then no flags
+
+`sindook init` creates an identity and remembers it as your default. After
+that, the everyday commands need no flags:
 
 ```sh
-# macOS or Linux
-./scripts/install.sh
+sindook init
+sindook seal report.pdf
+sindook open report.pdf.sindook
 ```
 
-```powershell
-# Windows PowerShell
-.\scripts\install.ps1
-```
+Each command prints which identity it used. `init` stores only the
+identity's path in the Sindook configuration directory, never the identity
+itself or a passphrase. Use `sindook init -p` to also put a passphrase on
+the identity file, or `sindook init -i existing.key` to make an existing
+identity the default. `SINDOOK_CONFIG_DIR` overrides the config location
+for portable installs and automation, and `sindook paths` shows it.
 
-Neither installer requires administrator rights; both print a PATH reminder
-when necessary. Release archives include checksums, an SBOM, a Sigstore bundle
-for `checksums.txt`, and GitHub build provenance. See the verification commands
-in the [README](../README.md#install) before trusting a downloaded binary.
-
-## First-time setup and contacts
-
-`init` creates an identity at an explicit path and remembers that path as the
-opt-in default. It does not copy the identity or a passphrase into the Sindook
-configuration directory:
-
-```sh
-sindook init -o personal.key -p
-sindook seal -r @default report.pdf
-sindook open -i @default report.pdf.sindook
-```
+## Contacts
 
 Save another person's public key under a portable contact name, then use
 `@name` anywhere a recipient is accepted:
@@ -53,7 +61,7 @@ sindook seal -r @alice project-plan.pdf
 
 `contacts list` prints each contact as `@name` plus a short fingerprint:
 SHA-256 over the decoded 1216-byte public key, first 16 bytes, lowercase
-hex with a `sha256:` prefix — a 128-bit collision space. Use it to spot
+hex with a `sha256:` prefix, a 128-bit collision space. Use it to spot
 that you are looking at the contact you expect, not to authenticate a key
 (the collision resistance is 2^64). `contacts show NAME` and
 `contacts list -json` print the full public key for real comparison.
@@ -104,16 +112,34 @@ Multiple recipients can each open the same file:
 sindook seal -r alice.pub -r bob.pub budget.xlsx
 ```
 
-When an identity is selected with `sindook init`, `@default` resolves to its
-public key for sealing and its private identity for `-i @default` on opening,
-verification, and rewrap. It is explicit: a command with no `-i`, `-p`, or
-`-passfile` still fails rather than silently choosing an identity.
+When an identity is selected with `sindook init`, that identity is used
+automatically by `seal`, `open`, `verify`, and `rewrap` when no credential
+flag is given, and `@default` still names it explicitly anywhere `-r` or
+`-i` accepts a key. Every such command prints which identity it used.
 
 A recipient list accepts one `sindookpk1:` public key per line. Blank lines and `#` comments are ignored:
 
 ```sh
 sindook seal -R team.keys plans.tar
 ```
+
+## Compress while sealing
+
+`-z` compresses with gzip before encrypting, and `open -z` reverses it:
+
+```sh
+sindook seal -z photos.tar
+sindook open -z photos.tar.sindook
+```
+
+Logs, CSV, and tar archives shrink a lot; JPEG and ZIP files barely change.
+Compression happens before encryption, so file sizes and padding reveal
+nothing about content beyond the compressed length. `rewrap` rotates
+compressed files unchanged, `verify` authenticates them like any other
+file, and armor combines with `-z` as usual. Opening a compressed file
+without `-z` writes the raw gzip stream, which `gunzip` or a second
+`sindook open -z` still recovers; opening an uncompressed file with `-z`
+fails with a clear message instead of writing bad output.
 
 ## Use a passphrase slot
 
@@ -247,7 +273,7 @@ status:
 | `0` | success |
 | `1` | operational failure (I/O error, malformed input, validation, or payload corruption) |
 | `2` | usage error (unknown command, bad flag, missing operand, malformed credential on the command line) |
-| `3` | authentication failure (wrong identity or passphrase, missing credential, or header tampering — `ErrWrongKey`, `ErrNeedIdentity`, `ErrNeedPassphrase`, `ErrHeaderTampered`); split from code `1` in v0.6.0 |
+| `3` | authentication failure (wrong identity or passphrase, missing credential, or header tampering, `ErrWrongKey`, `ErrNeedIdentity`, `ErrNeedPassphrase`, `ErrHeaderTampered`); split from code `1` in v0.6.0 |
 
 Before v0.6.0, authentication failures exited with `1`. Batch commands check every file even if an earlier one fails and exit non-zero if any did (joined usage+authentication errors prefer `2`). Treat exit codes and `-json` output as the stable scripting interface; human-readable text is not one.
 

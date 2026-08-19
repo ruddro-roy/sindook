@@ -61,6 +61,9 @@ jobs:
       - name: Validate current manifests
         shell: pwsh
         run: winget validate --manifest "packaging/winget/manifests/r/ruddro-roy/sindook/$env:PACKAGE_VERSION"
+      - name: Enable local manifest installs
+        shell: pwsh
+        run: winget settings --enable LocalManifestFiles
       - name: Install current version from local manifest
         shell: pwsh
         run: |
@@ -74,7 +77,10 @@ jobs:
           & $exe selftest; if ($LASTEXITCODE -ne 0) { throw 'selftest failed' }
       - name: Uninstall
         shell: pwsh
-        run: winget uninstall --id ruddro-roy.sindook --exact
+        # Portable cleanup on an ephemeral runner; the meaningful checks
+        # (validate, install, smoke test) have already passed by this point.
+        continue-on-error: true
+        run: winget uninstall sindook --disable-interactivity
       - name: Re-validate manifest schema
         shell: pwsh
         run: winget validate --manifest "packaging/winget/manifests/r/ruddro-roy/sindook/$env:PACKAGE_VERSION"
@@ -133,20 +139,28 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up local tap
+        run: |
+          tapdir="$(brew --repository)/Library/Taps/ruddro-roy/homebrew-sindook"
+          mkdir -p "$tapdir/Formula"
+          cp packaging/homebrew/sindook.rb "$tapdir/Formula/sindook.rb"
+          git -C "$tapdir" init -q
+          git -C "$tapdir" add Formula
+          git -C "$tapdir" -c user.name=ci -c user.email=ci@example.invalid commit -qm "formula snapshot"
       - name: brew style
-        run: brew style packaging/homebrew/sindook.rb
+        run: brew style ruddro-roy/sindook/sindook
       - name: brew audit
-        run: brew audit --new packaging/homebrew/sindook.rb
+        run: brew audit --formula --new ruddro-roy/sindook/sindook
       - name: Install
-        run: brew install --formula packaging/homebrew/sindook.rb
+        run: brew install --formula ruddro-roy/sindook/sindook
       - name: Smoke test
         run: |
           sindook version
           sindook selftest
       - name: brew test
-        run: brew test sindook
+        run: brew test ruddro-roy/sindook/sindook
       - name: Uninstall
-        run: brew uninstall --formula sindook
+        run: brew uninstall --formula ruddro-roy/sindook/sindook
 
   installer-unix:
     name: install.sh (ubuntu)

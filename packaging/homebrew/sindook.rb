@@ -1,3 +1,6 @@
+# typed: strict
+# frozen_string_literal: true
+
 # Homebrew formula for Sindook.
 #
 # This formula installs the prebuilt, CGO-free release binaries only; there
@@ -13,8 +16,8 @@
 class Sindook < Formula
   desc "Hybrid post-quantum file encryption (X-Wing: X25519 + ML-KEM-768)"
   homepage "https://github.com/ruddro-roy/sindook"
-  license "Apache-2.0"
   version "0.7.0"
+  license "Apache-2.0"
 
   on_macos do
     if Hardware::CPU.intel?
@@ -53,7 +56,7 @@ class Sindook < Formula
   end
 
   test do
-    assert_match(/^sindook #{Regexp.escape(version)}/, shell_output("#{bin}/sindook version"))
-    system "#{bin}/sindook", "selftest"
+    assert_match(/^sindook #{Regexp.escape(version)}/, shell_output("#{bin/"sindook"} version"))
+    system bin/"sindook", "selftest"
   end
 end

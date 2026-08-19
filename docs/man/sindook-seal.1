@@ -1,16 +1,19 @@
-.TH SINDOOK-SEAL 1 "2026-08-18" "sindook 0.7.1" "User Commands"
+.TH SINDOOK-SEAL 1 "2026-08-19" "sindook 0.8.0" "User Commands"
 .SH NAME
 sindook-seal \- encrypt files to recipients and/or a passphrase
 .SH SYNOPSIS
 .B sindook seal
 [\fB\-r\fP \fIRECIPIENT\fP]... [\fB\-R\fP \fIFILE\fP]...
-[\fB\-p\fP | \fB\-passfile\fP \fIFILE\fP] [\fB\-glob\fP \fIPATTERN\fP]...
+[\fB\-p\fP | \fB\-passfile\fP \fIFILE\fP] [\fB\-z\fP] [\fB\-glob\fP \fIPATTERN\fP]...
 [\fB\-a\fP] [\fB\-o\fP \fIOUT\fP] [\fB\-f\fP] [\fIFILE\fP...]
 .SH DESCRIPTION
 Seals files to recipients and/or a passphrase. Every recipient and
 passphrase becomes a key slot; any one of them opens the file. Each
 \fIFILE\fP becomes \fIFILE\fP\fB.sindook\fP; with no \fIFILE\fP,
-stdin is sealed to stdout.
+stdin is sealed to stdout. With no recipient and no passphrase, the
+identity selected by
+.BR sindook-init (1)
+seals the file, so sealing to yourself needs no flags after init.
 .SH OPTIONS
 .TP
 \fB\-r\fP \fIRECIPIENT\fP
@@ -26,6 +29,9 @@ add a passphrase slot, prompted at the terminal
 \fB\-passfile\fP \fIFILE\fP
 read the passphrase from \fIFILE\fP instead, implies \fB\-p\fP
 .TP
+\fB\-z\fP
+compress before encrypting; open the result with \fBsindook open \-z\fP
+.TP
 \fB\-glob\fP \fIPATTERN\fP
 add files matched by a portable filesystem pattern, repeatable
 .TP
@@ -39,12 +45,11 @@ output path, \fB\-\fP for stdout (single \fIFILE\fP only)
 overwrite existing output
 .SH EXAMPLES
 .nf
-sindook seal -r my.key.pub report.pdf
+sindook seal report.pdf
+sindook seal -z photos.tar
 sindook seal -r alice.pub -r bob.pub -p budget.xlsx
 sindook seal -R team.keys *.log
-sindook seal -r alice.pub -glob "reports/*.pdf"
 tar cz src | sindook seal -r my.key.pub -o src.tgz.sindook
-sindook seal -r alice.pub -a -o - secret.txt | pbcopy
 .fi
 .SH SEE ALSO
 .BR sindook (1),

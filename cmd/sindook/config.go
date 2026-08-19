@@ -159,6 +159,26 @@ func defaultPublicKeyPath() (string, error) {
 	return path, nil
 }
 
+// defaultIdentityIfReady reports the configured default identity when its
+// file exists on disk. It never returns an error: a missing or unreadable
+// configuration means no default for command fallbacks, while sindook doctor
+// is the place configuration problems are reported. Callers that need the
+// public side check for the .pub file themselves.
+func defaultIdentityIfReady() (string, bool) {
+	cfg, err := loadSindookConfig()
+	if err != nil {
+		return "", false
+	}
+	if cfg.DefaultIdentity == "" {
+		return "", false
+	}
+	info, err := os.Stat(cfg.DefaultIdentity)
+	if err != nil || !info.Mode().IsRegular() {
+		return "", false
+	}
+	return cfg.DefaultIdentity, true
+}
+
 func normalizeContactName(name string) (string, error) {
 	if strings.HasPrefix(name, "@") {
 		name = strings.TrimPrefix(name, "@")
@@ -318,7 +338,7 @@ func cmdInit(args []string) error {
 	if err := setDefaultIdentity(path); err != nil {
 		return fmt.Errorf("sindook: created identity %s but could not set it as default: %w", *out, err)
 	}
-	fmt.Fprintf(os.Stderr, "identity: %s\npublic key: %s\ndefault identity: %s\n", *out, *out+".pub", path)
+	fmt.Fprintf(os.Stderr, "identity: %s\npublic key: %s\ndefault identity: %s\nnext: sindook seal FILE\n", *out, *out+".pub", path)
 	fmt.Println(pub)
 	return nil
 }

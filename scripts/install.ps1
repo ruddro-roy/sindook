@@ -2,7 +2,9 @@
 Install a released Sindook binary for Windows without administrator rights.
 The matching SHA-256 checksum is verified before installation; a cosign
 keyless signature check runs when cosign is available (best-effort, clearly
-announced). This script is meant to be downloaded and run directly.
+announced). The script reads nothing from the console, so piping it is safe:
+irm <url> | iex. Downloading and running it directly works the same way and
+allows parameters.
 #>
 [CmdletBinding()]
 param(

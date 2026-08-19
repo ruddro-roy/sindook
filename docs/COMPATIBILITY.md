@@ -13,7 +13,7 @@ Official release binaries and CI coverage target:
 | --- | --- | --- |
 | Linux | amd64, arm64 | mainstream distributions |
 | macOS | amd64, arm64 | current macOS on Intel and Apple Silicon |
-| Windows | amd64, arm64 | Windows 10/11; arm64 ships and is CI-tested, but it has seen less real-world use than amd64 — report issues |
+| Windows | amd64, arm64 | Windows 10/11; arm64 ships and is CI-tested, but it has seen less real-world use than amd64, report issues |
 | FreeBSD | amd64, arm64 | supported by the pure-Go memory-locking and filesystem code paths; no official release archive is built yet, so FreeBSD users install from source |
 
 The command surface, managed-contact config, `-glob` batch selection,
@@ -50,6 +50,24 @@ command, but any user-visible change is announced in the changelog
 ([docs/CHANGELOG.md](CHANGELOG.md)) and the renamed spelling is kept as a
 deprecated alias where practical.
 
+### Credential defaults (since v0.8.0)
+
+After `sindook init`, `seal`, `open`, `verify`, and `rewrap` use the
+configured default identity when no credential flag is given:
+
+- `seal FILE` with no `-r`, `-R`, or `-p` seals to the default identity.
+- `open`, `verify`, and `rewrap` with no `-i`, `-p`, or `-passfile` unlock
+  with the default identity.
+- Each command prints which identity it used to stderr, so automation logs
+  stay explicit. `-json` output goes to stdout and is unchanged.
+- With no default identity configured, the commands keep failing with a
+  usage error (exit `2`) and name `sindook init` in the message.
+
+Explicit flags always win and keep their exact prior meaning; `-i @default`
+also still works. This is a behavior change from v0.7.x, where bare
+credential-less commands always failed; scripts that relied on that failure
+should set `SINDOOK_CONFIG_DIR` to an empty directory, which restores it.
+
 ### Exit codes (stable within a major version)
 
 | Code | Meaning | Since |
@@ -57,7 +75,7 @@ deprecated alias where practical.
 | `0` | success | v0.1.0 |
 | `1` | operational failure: I/O error, malformed input, validation failure, payload corruption (`ErrNotSindook`, `ErrPayloadCorrupted`), or missing file | v0.1.0 |
 | `2` | usage error: unknown command, flag-parsing failure, missing positional argument, or malformed credential supplied on the command line | v0.1.0 |
-| `3` | authentication failure: wrong identity or passphrase, missing credential, or header tampering (`ErrWrongKey`, `ErrNeedIdentity`, `ErrNeedPassphrase`, `ErrHeaderTampered`) — split from code `1` in v0.6.0 for scripting | v0.6.0 |
+| `3` | authentication failure: wrong identity or passphrase, missing credential, or header tampering (`ErrWrongKey`, `ErrNeedIdentity`, `ErrNeedPassphrase`, `ErrHeaderTampered`), split from code `1` in v0.6.0 for scripting | v0.6.0 |
 
 Before v0.6.0, authentication failures exited with `1`. From v0.6.0 they exit with `3` so scripts can distinguish "wrong key" from "corrupted file" without parsing text. A joined error containing both a usage and an authentication failure exits with `2`.
 
@@ -96,7 +114,7 @@ portable installs and isolated automation). Schema, version 1:
 - `default_identity` is an optional absolute path to a user-owned identity file. Sindook stores the path; it never copies, moves, or rewrites the identity.
 - `contacts` maps portable, case-insensitive names to full public keys.
 
-Migration policy: changes are additive — new optional fields with defaults
+Migration policy: changes are additive, new optional fields with defaults
 that older versions can ignore. The loader rejects a `version` it does not
 know rather than guessing. Unknown fields are ignored when loading; when
 Sindook next writes the file it writes only the fields it knows, so
@@ -107,7 +125,7 @@ validated for portability (no Windows-reserved names) on load.
 
 - Private identity files never enter the configuration directory. The config contains only public keys and the default identity's path.
 - Identities are ordinary files (`keygen -o`); their permissions are the user's responsibility, and `keygen` creates them mode `0600` with a mode `0644` `.pub` sidecar on POSIX.
-- `contacts list` prints each contact as `@name` plus a short fingerprint: SHA-256 over the decoded 1216-byte public key, first 16 bytes, lowercase hex, `sha256:` prefix (128-bit collision space; 2^64 collision resistance — for recognition, not authentication). `contacts show NAME` and `contacts list -json` print the full public key.
+- `contacts list` prints each contact as `@name` plus a short fingerprint: SHA-256 over the decoded 1216-byte public key, first 16 bytes, lowercase hex, `sha256:` prefix (128-bit collision space; 2^64 collision resistance, for recognition, not authentication). `contacts show NAME` and `contacts list -json` print the full public key.
 
 ## Sealed files
 
@@ -123,7 +141,7 @@ Sindook's compatibility policy is to keep files sealed by released versions read
 The byte layout is specified in [docs/FORMAT.md](FORMAT.md). Deprecation
 means "still readable, no longer written"; no version has been removed from
 the reader. Removing read support for a format version would require a
-major version and an explicit migration window — there is no plan to remove
+major version and an explicit migration window, there is no plan to remove
 v1 read support. Compatibility is proven by committed fixtures: v1 golden
 files, and files produced by the released v0.6.0 binary (`internal/box/testdata/v060-*.sindook`),
 opened by the current test suite.
@@ -136,7 +154,7 @@ for the new slot set.
 
 - Fast mode keeps the file key and file nonce, so the payload bytes are copied through unchanged into a replacement file. It does not decrypt or re-encrypt the payload and does not materialize payload plaintext. It is the right tool for adding recipients, changing passphrases, and upgrading v1 files to v2 in place.
 - Fast mode is not revocation: a removed recipient who kept a copy of the old file still knows the file key.
-- Deep mode draws a fresh file key and nonce and re-encrypts the payload by streaming decrypt and re-encrypt, one chunk in memory at a time. A removed recipient cannot open the newly produced replacement through an old slot — but neither mode can invalidate copies already held by an attacker or recipient.
+- Deep mode draws a fresh file key and nonce and re-encrypts the payload by streaming decrypt and re-encrypt, one chunk in memory at a time. A removed recipient cannot open the newly produced replacement through an old slot, but neither mode can invalidate copies already held by an attacker or recipient.
 
 ### Symlink and filesystem-safety behavior
 
