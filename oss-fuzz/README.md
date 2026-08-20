@@ -22,11 +22,13 @@ goes in the OSS-Fuzz repo.
 Reapply when the adoption-based objection plausibly no longer holds:
 growing external user base, rising criticality score, evidence of
 real-world use. At that point, fork google/oss-fuzz, copy these three
-files to `projects/sindook/`, add a dedicated project contact as
-`primary_contact` (a deliverable role address such as a future
-`security@sindook` domain mailbox, not a personal address — crash
-reports go there and the address becomes public in this repository),
-open a PR, and reference the earlier thread and CLA signature.
+files to `projects/sindook/`, add a `primary_contact`, open a PR, and
+reference the earlier thread and CLA signature. The contact must be a
+deliverable mailbox a maintainer controls and can verify with a Google
+account (GitHub noreply addresses do not qualify), and it becomes
+public in the oss-fuzz repo; `roy@ruddro.com` is already public
+through this repository's commit history, so it exposes nothing new,
+or use a dedicated project mailbox if one exists by then.
 
 ## Targets
 
