@@ -63,9 +63,13 @@ of v0.8.1. See docs/CHANGELOG.md.)
 - Reliable release reproducibility and provenance: an independent rebuild
   from the tag reproduces the published artifacts, and provenance
   verification is scriptable.
-- Long-running fuzzing history: the fuzz targets have run continuously
-  (CI fuzz-smoke today is not that; continuous fuzzing on OSS-Fuzz or an
-  equivalent long-running service is).
+- Long-running fuzzing history: ClusterFuzzLite daily batch runs with a
+  persistent corpus (committed to the `corpora` branch) are the current
+  mechanism and their accumulated history counts toward this. An OSS-Fuzz
+  application (google/oss-fuzz#15899, 2026-07-23) was closed by the
+  maintainers because the project does not yet have a wide user base; no
+  technical objections were raised against the integration. Reapply once
+  real-world adoption grows.
 - Security-response process: private reporting, response SLAs, and at
   least one exercised coordinated-disclosure cycle.
 - Independent cryptographic and implementation review of the X-Wing
@@ -80,7 +84,9 @@ of v0.8.1. See docs/CHANGELOG.md.)
 
 - An independent security audit (not claimed in v0.8.1; none has been
   performed).
-- Continuous fuzzing results from an external service.
+- Continuous fuzzing results from an external service. (OSS-Fuzz
+  application google/oss-fuzz#15899 was declined on 2026-07-23 for
+  insufficient adoption; reapply once real-world use grows.)
 - Adoption metrics and user reports from parties other than the author.
 - Confirmation from the IETF process on the final X-Wing RFC status (the
   current integration targets draft-10).

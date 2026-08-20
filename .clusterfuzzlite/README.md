@@ -2,24 +2,36 @@
 
 ClusterFuzzLite (CFLite) continuously fuzzes sindook's parsers and crypto
 code: on every pull request that touches Go code (`.github/workflows/cflite_pr.yml`,
-300 s) and weekly in batch mode (`.github/workflows/cflite_batch.yml`, 1800 s).
+300 s, code-change mode) and daily in batch mode (`.github/workflows/cflite_batch.yml`,
+1800 s). Batch runs persist their corpus to the `corpora` branch of this
+repository, so each run starts from everything earlier runs found.
 
 ## Files
 
 - `Dockerfile` — builds on the OSS-Fuzz `base-builder-go` image, pinned by
   digest so the toolchain is reproducible. It copies the repository into
   `$SRC/sindook` and `build.sh` to `$SRC/build.sh`.
-- `build.sh` — compiles each fuzz target with `compile_native_go_fuzzer` and
-  installs the resulting binaries under `$OUT` with unique names
-  (`fuzz_box_open`, `fuzz_xwing_decapsulate`, ...). The
-  `go-118-fuzz-build` shim is pinned to a commit SHA; keep the pins when
-  editing.
+- `build.sh` — compiles each fuzz target with `compile_native_go_fuzzer_v2`
+  and installs the resulting binaries under `$OUT` with unique names
+  (`fuzz_box_open`, `fuzz_xwing_decapsulate`, ...). The legacy
+  `compile_native_go_fuzzer` wrapper silently skips a target whose name is a
+  prefix of another fuzz function in the same package (it greps `func Name`
+  as a substring), which is why `FuzzArmor` and `FuzzDecapsulate` went
+  unbuilt until 2026-08; the `_v2` wrapper matches `func Name(` exactly and
+  exits nonzero on ambiguity. The `go-118-fuzz-build` shim is pinned to
+  commit `fc5dc53b9db8` in two places — the `go get` in `build.sh` and the
+  binary rebuild in the `Dockerfile` (the image ships a Go-1.25 build that
+  cannot process go1.26 sources) — keep the two pins and the Go version in
+  `go.mod` in sync when bumping any of them. The final loop in `build.sh`
+  fails the build unless every expected binary exists in `$OUT`, so a
+  skipped target can never pass silently again.
 - `project.yaml` — declares the project language (`go`).
 
 Adding a fuzz target: write a `FuzzXxx(f *testing.F)` function in the
-package's `fuzz_test.go`, then add one `compile_native_go_fuzzer
+package's `fuzz_test.go`, then add one `compile_native_go_fuzzer_v2
 github.com/ruddro-roy/sindook/<pkg> FuzzXxx fuzz_<unique_name>` line to
-`build.sh`. Output names may contain only alphanumerics, `_`, and `-`.
+`build.sh` and add the output name to the existence-check loop at the
+bottom. Output names may contain only alphanumerics, `_`, and `-`.
 
 ## Building and running locally
 
@@ -113,12 +125,11 @@ Rules:
 - Crash artifacts: `run_fuzzers` uploads crashing testcases as workflow
   artifacts automatically; download them from the run summary
   ("Artifacts" panel).
-- SARIF: add `output-sarif: true` to the `run_fuzzers` step of
-  `.github/workflows/cflite_pr.yml` (and `cflite_batch.yml`) to upload crash
-  results as SARIF to GitHub code scanning (Security → Code scanning), where
-  each crash appears as a code scanning alert. The workflows in this
-  repository intentionally keep `output-sarif` off by default; enable it
-  when the repo has code scanning available.
-- Without a `storage-repo`, batch corpora and coverage data are also
-  uploaded as workflow artifacts; configuring a storage repo (see the CFLite
-  GitHub Actions docs) is optional.
+- SARIF: both workflows set `output-sarif: true`, so crash results are
+  uploaded as SARIF to GitHub code scanning (Security → Code scanning),
+  where each crash appears as a code scanning alert.
+- Batch corpora are committed to the `corpora` branch of this repository
+  (`storage-repo`/`storage-repo-branch` in `cflite_batch.yml`), which is
+  what makes the daily runs compound instead of restarting from the seed
+  corpora. The batch workflow needs `contents: write` for this; keep that
+  permission in sync with the storage-repo settings.
