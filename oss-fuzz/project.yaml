@@ -5,3 +5,4 @@ fuzzing_engines:
   - libfuzzer
 sanitizers:
   - address
+primary_contact: "roy@ruddro.com"
