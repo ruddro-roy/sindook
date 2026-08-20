@@ -25,5 +25,5 @@ jobs:
           mode: batch
           sanitizer: address
           output-sarif: true
-          storage-repo: ruddro-roy/sindook
+          storage-repo: https://github.com/ruddro-roy/sindook
           storage-repo-branch: corpora
