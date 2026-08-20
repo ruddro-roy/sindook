@@ -28,7 +28,7 @@ jobs:
           mode: batch
           sanitizer: address
           output-sarif: true
-          storage-repo: https://github.com/ruddro-roy/sindook
+          storage-repo: https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/ruddro-roy/sindook.git
           storage-repo-branch: corpora
       # The run_fuzzers action logs corpus upload errors but still exits 0,
       # which once let every batch run silently lose its discoveries. Fail
@@ -63,5 +63,5 @@ jobs:
           fuzz-seconds: 600
           mode: prune
           sanitizer: address
-          storage-repo: https://github.com/ruddro-roy/sindook
+          storage-repo: https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/ruddro-roy/sindook.git
           storage-repo-branch: corpora

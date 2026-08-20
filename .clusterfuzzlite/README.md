@@ -139,5 +139,9 @@ Rules:
 - Batch corpora are committed to the `corpora` branch of this repository
   (`storage-repo`/`storage-repo-branch` in `cflite_batch.yml`), which is
   what makes the daily runs compound instead of restarting from the seed
-  corpora. The batch workflow needs `contents: write` for this; keep that
-  permission in sync with the storage-repo settings.
+  corpora. The storage URL must carry push credentials — the workflow
+  embeds the ephemeral `GITHUB_TOKEN` as `x-access-token`, per the
+  ClusterFuzzLite storage-repo pattern; a bare https URL makes every
+  corpus push fail with "could not read Username" while the workflow
+  still reports success. The batch workflow needs `contents: write` for
+  this; keep that permission in sync with the storage-repo settings.
