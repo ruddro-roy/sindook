@@ -2,6 +2,14 @@
 # See packaging/README.md for release-time fill instructions.
 name: package-manifests
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'packaging/**'
+      - 'scripts/install.sh'
+      - 'scripts/install.ps1'
+      - 'scripts/fill-package-hashes.sh'
+      - '.github/workflows/package-manifests.yml'
   pull_request:
     paths:
       - 'packaging/**'

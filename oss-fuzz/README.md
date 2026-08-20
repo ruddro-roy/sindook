@@ -33,11 +33,14 @@ mailbox if one exists by then.
 
 ## Targets
 
-Nine native Go targets, kept in sync with `.clusterfuzzlite/build.sh`:
-four box header/payload parsers, the armor decoder, and four X-Wing
-targets (decapsulation, encapsulation, key generation, and
-decapsulation against random identities). When a target is added to
-`.clusterfuzzlite/build.sh`, add it here too.
+Fifteen native Go targets — every `Fuzz` function declared in the
+repository's test files: eight box header/payload/parser targets
+including open, rewrap, rewrap-round-trip, and inspect; the three armor
+codec targets; and four X-Wing targets (decapsulation, encapsulation,
+key generation, and decapsulation against random identities). The list
+is kept complete automatically: guards in both build scripts fail the
+build if a declared `Fuzz` function has no compile line, or if a
+compile line produces no binary.
 
 Both build scripts use `compile_native_go_fuzzer_v2` and verify every
 expected binary exists afterward. The legacy `compile_native_go_fuzzer`

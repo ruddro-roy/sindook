@@ -158,8 +158,13 @@ func TestBuildVersionDevDefault(t *testing.T) {
 	got := runBinaryVersion(t, bin)
 	tagged := "sindook " + strings.TrimSuffix(version, "-dev")
 	dev := "sindook " + version
-	if !strings.HasPrefix(got, tagged) && !strings.HasPrefix(got, dev) {
-		t.Errorf("dev build version output = %q, want prefix %q (tagged checkout) or %q (dev checkout)", got, tagged, dev)
+	// Accept "sindook 0.8.1-dev..." for dev checkouts, and "sindook 0.8.1"
+	// exactly or followed only by the " (<revision>)" provenance suffix for
+	// tagged checkouts. A bare prefix match on tagged would also accept
+	// longer versions such as "sindook 0.8.10", which is not this build.
+	taggedOK := got == tagged || strings.HasPrefix(got, tagged+" (")
+	if !taggedOK && !strings.HasPrefix(got, dev) {
+		t.Errorf("dev build version output = %q, want %q (tagged checkout), %q (dev checkout), or either followed by build provenance", got, tagged, dev)
 	}
 }
 

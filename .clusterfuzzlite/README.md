@@ -3,8 +3,12 @@
 ClusterFuzzLite (CFLite) continuously fuzzes sindook's parsers and crypto
 code: on every pull request that touches Go code (`.github/workflows/cflite_pr.yml`,
 300 s, code-change mode) and daily in batch mode (`.github/workflows/cflite_batch.yml`,
-1800 s). Batch runs persist their corpus to the `corpora` branch of this
-repository, so each run starts from everything earlier runs found.
+1800 s) followed by a corpus-pruning job (600 s, prune mode). Batch runs
+persist their corpus to the `corpora` branch of this repository, so each
+run starts from everything earlier runs found, and the workflow fails
+unless that branch actually advanced — the storage branch must exist on
+origin before the first run (it is an orphan branch initialized with a
+single empty marker commit).
 
 ## Files
 
@@ -21,17 +25,21 @@ repository, so each run starts from everything earlier runs found.
   exits nonzero on ambiguity. The `go-118-fuzz-build` shim is pinned to
   commit `fc5dc53b9db8` in two places — the `go get` in `build.sh` and the
   binary rebuild in the `Dockerfile` (the image ships a Go-1.25 build that
-  cannot process go1.26 sources) — keep the two pins and the Go version in
-  `go.mod` in sync when bumping any of them. The final loop in `build.sh`
-  fails the build unless every expected binary exists in `$OUT`, so a
-  skipped target can never pass silently again.
+  cannot process go1.26 sources) — keep the two pins, the Go tarball
+  SHA-256, and the Go version in `go.mod` in sync when bumping any of
+  them. `build.sh` ends with two automatic guards: every `Fuzz` function
+  declared in the repository's `*_test.go` files must have a compile line
+  in the script, and every compile line must have produced its binary in
+  `$OUT` — a fuzz target can never go missing silently again.
 - `project.yaml` — declares the project language (`go`).
 
 Adding a fuzz target: write a `FuzzXxx(f *testing.F)` function in the
 package's `fuzz_test.go`, then add one `compile_native_go_fuzzer_v2
 github.com/ruddro-roy/sindook/<pkg> FuzzXxx fuzz_<unique_name>` line to
-`build.sh` and add the output name to the existence-check loop at the
-bottom. Output names may contain only alphanumerics, `_`, and `-`.
+`build.sh` (in both this copy and `oss-fuzz/build.sh`). The guards at the
+bottom fail the build if a declared function is missing from the script or
+a compile line produced no binary. Output names may contain only
+alphanumerics, `_`, and `-`.
 
 ## Building and running locally
 

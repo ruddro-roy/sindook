@@ -3,6 +3,7 @@ FROM gcr.io/oss-fuzz-base/base-builder-go@sha256:e5e5ecf4fb18a2f47bf0462c37e3572
 # the local toolchain instead of the go.mod auto-switch, so sindook's
 # "go 1.26.6" requirement needs a real 1.26.6 toolchain in the image.
 RUN curl -fsSL https://go.dev/dl/go1.26.6.linux-amd64.tar.gz -o /tmp/go.tgz \
+    && echo '708effb774be8237570d0add163225abbdfaf4fca28b2611df167beba4feef89  /tmp/go.tgz' | sha256sum -c - \
     && rm -rf /root/.go \
     && mkdir -p /root/.go \
     && tar -C /root/.go --strip-components=1 -xzf /tmp/go.tgz \

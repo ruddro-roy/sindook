@@ -16,6 +16,9 @@ jobs:
         with:
           language: go
           sanitizer: address
+      - name: Record corpus branch state
+        run: |
+          echo "CORPUS_BEFORE=$(git ls-remote https://github.com/ruddro-roy/sindook.git refs/heads/corpora | cut -f1)" >> "$GITHUB_ENV"
       - name: Run fuzzers
         id: run
         uses: google/clusterfuzzlite/actions/run_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1 # v1
@@ -25,5 +28,40 @@ jobs:
           mode: batch
           sanitizer: address
           output-sarif: true
+          storage-repo: https://github.com/ruddro-roy/sindook
+          storage-repo-branch: corpora
+      # The run_fuzzers action logs corpus upload errors but still exits 0,
+      # which once let every batch run silently lose its discoveries. Fail
+      # the workflow unless the corpus branch actually advanced.
+      - name: Verify corpus storage advanced
+        run: |
+          after=$(git ls-remote https://github.com/ruddro-roy/sindook.git refs/heads/corpora | cut -f1)
+          if [ -z "$after" ]; then
+            echo "::error::the corpora branch is missing on origin"
+            exit 1
+          fi
+          if [ "$after" = "$CORPUS_BEFORE" ]; then
+            echo "::error::the corpora branch did not advance; corpus upload likely failed"
+            exit 1
+          fi
+          echo "corpus advanced: ${CORPUS_BEFORE:0:12} -> ${after:0:12}"
+  pruning:
+    runs-on: ubuntu-latest
+    needs: batch-fuzzing
+    steps:
+      - name: Build fuzzers
+        id: build
+        uses: google/clusterfuzzlite/actions/build_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1 # v1
+        with:
+          language: go
+          sanitizer: address
+      - name: Prune corpus
+        id: run
+        uses: google/clusterfuzzlite/actions/run_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1 # v1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          fuzz-seconds: 600
+          mode: prune
+          sanitizer: address
           storage-repo: https://github.com/ruddro-roy/sindook
           storage-repo-branch: corpora
