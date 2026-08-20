@@ -176,10 +176,27 @@ func TestConcurrentWipeStress(t *testing.T) {
 		}()
 	}
 
-	// Give the decapsulators a head start so the success path is exercised
-	// before the first wipe: once any Wipe has returned, every later
-	// decapsulation must fail, so successes can only happen in this window.
-	time.Sleep(10 * time.Millisecond)
+	// Wait until at least one decapsulation has succeeded before releasing
+	// the wipes: once any Wipe has returned, every later decapsulation must
+	// fail, so successes can only happen in this window. Waiting for a real
+	// success instead of a fixed head start keeps the success-path
+	// assertion deterministic on slow, loaded runners, where a fixed 10 ms
+	// head start can expire before a single decapsulation completes.
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		successMu.Lock()
+		n := len(successAt)
+		successMu.Unlock()
+		if n > 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			close(done)
+			wg.Wait()
+			t.Fatal("no decapsulation succeeded before the wipes started; the success path could not be exercised")
+		}
+		runtime.Gosched()
+	}
 
 	for i := 0; i < wipeWorkers; i++ {
 		wg.Add(1)
