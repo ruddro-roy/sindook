@@ -113,7 +113,7 @@ go test -run='FuzzDecapsulate/<hash>' ./xwing
 
 ## Corpus policy
 
-The committed seed corpora under `internal/box/testdata/fuzz/`,
+The committed seed corpora under `box/testdata/fuzz/`,
 `internal/armor/testdata/fuzz/`, and `xwing/testdata/fuzz/` are the starting
 points for every fuzz run and replay under plain `go test`.
 

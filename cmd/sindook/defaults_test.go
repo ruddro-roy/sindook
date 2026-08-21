@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ruddro-roy/sindook/internal/box"
+	"github.com/ruddro-roy/sindook/box"
 )
 
 // After sindook init, the everyday commands need no credential flags:

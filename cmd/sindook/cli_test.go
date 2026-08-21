@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ruddro-roy/sindook/internal/box"
+	"github.com/ruddro-roy/sindook/box"
 	"github.com/ruddro-roy/sindook/internal/memguard"
 )
 

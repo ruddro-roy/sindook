@@ -5,13 +5,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ruddro-roy/sindook/internal/box"
+	"github.com/ruddro-roy/sindook/box"
 	"github.com/ruddro-roy/sindook/internal/memguard"
 )
 
 // TestLockAllDoesNotOOMWithPassphraseBox is the box-level regression test for
 // the memguard OOM. It lives in package memguard_test to avoid an import
-// cycle (internal/box imports internal/memguard). It calls LockAll and then
+// cycle (box imports internal/memguard). It calls LockAll and then
 // seals with a passphrase, which internally allocates the Argon2id buffer.
 // With the buggy MCL_FUTURE path and low RLIMIT_MEMLOCK this would abort the
 // runtime with "cannot allocate 67108864-byte block".

@@ -5,6 +5,26 @@ All notable user-visible changes are documented here. The format follows
 uses semantic versioning. Pre-1.0 releases may change commands with a
 clear entry here, as described in [docs/COMPATIBILITY.md](COMPATIBILITY.md).
 
+## [Unreleased]
+
+### Added
+
+- Public Go library API. The sealing engine moved from `internal/` to the
+  top-level `box` package: `github.com/ruddro-roy/sindook/box` exposes
+  `Seal`, `SealRecipient`, `SealPassphrase`, `Open`, `Rewrap`, `Inspect`,
+  and `SelfTest`, with `github.com/ruddro-roy/sindook/xwing` as the key
+  package. The stability policy is in docs/COMPATIBILITY.md. Code that
+  imported the old `internal/box` path must switch to
+  `github.com/ruddro-roy/sindook/box`.
+
+### Changed
+
+- Continuous fuzzing now builds all fifteen declared fuzz targets (a
+  compiler-wrapper quirk silently skipped targets whose names prefix
+  another fuzz function), runs daily with a persistent, pruned corpus on
+  the `corpora` branch, and fails the workflow if corpus storage stops
+  advancing.
+
 ## [v0.8.1] - 2026-08-19 (the first published 0.8.x release; the v0.8.0 tag exists but was never released, see below)
 
 ### Added

@@ -143,7 +143,7 @@ means "still readable, no longer written"; no version has been removed from
 the reader. Removing read support for a format version would require a
 major version and an explicit migration window, there is no plan to remove
 v1 read support. Compatibility is proven by committed fixtures: v1 golden
-files, and files produced by the released v0.6.0 binary (`internal/box/testdata/v060-*.sindook`),
+files, and files produced by the released v0.6.0 binary (`box/testdata/v060-*.sindook`),
 opened by the current test suite.
 
 ### Rewrap security properties
@@ -173,7 +173,20 @@ assumes the endpoint and its filesystem are trusted ([docs/THREAT_MODEL.md](THRE
 
 ## Go API
 
-`github.com/ruddro-roy/sindook/xwing` tracks the X-Wing Internet-Draft and is draft-stable: a wire-format change in the draft before RFC publication is the one event that may break it, and it will be a major-version event. `internal/` packages (including `internal/box`) are not an API and may change freely in any release. Installing the CLI by module path (`go install .../cmd/sindook@vX.Y.Z`) is supported; depending on the module as a library is not yet a promise.
+The public Go API is two packages: `github.com/ruddro-roy/sindook/box`
+(seal, open, rewrap, inspect, selftest) and
+`github.com/ruddro-roy/sindook/xwing` (the X-Wing hybrid KEM).
+Everything under `internal/` is not an API and may change freely in any
+release.
+
+While the module is v0.x, the `box` and `xwing` APIs may change between
+minor releases with a changelog entry; breaking changes are avoided where
+practical. From v1.0, both packages follow the same compatibility promise
+as the CLI and the file format: no breaking changes within a major
+version. `xwing` remains draft-stable: a wire-format change in the draft
+before RFC publication is the one event that may break it, and it will be
+a major-version event. Installing the CLI by module path
+(`go install .../cmd/sindook@vX.Y.Z`) is supported.
 
 ## X-Wing draft status
 

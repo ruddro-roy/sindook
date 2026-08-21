@@ -25,7 +25,7 @@ go run golang.org/x/vuln/cmd/govulncheck@v1.6.0 ./...
 The CI workflow also runs short fuzz smoke tests. To run one locally:
 
 ```sh
-go test ./internal/box -run='^$' -fuzz='^FuzzOpenRecipient$' -fuzztime=30s
+go test ./box -run='^$' -fuzz='^FuzzOpenRecipient$' -fuzztime=30s
 ```
 
 ## Security-sensitive changes

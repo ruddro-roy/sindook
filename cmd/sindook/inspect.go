@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/ruddro-roy/sindook/internal/box"
+	"github.com/ruddro-roy/sindook/box"
 )
 
 const usageInspect = `usage: sindook inspect [-json] [-glob PATTERN]... [FILE...]

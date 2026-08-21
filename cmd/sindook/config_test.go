@@ -580,7 +580,7 @@ func TestSaveSindookConfigPermissions(t *testing.T) {
 //
 // The literal below was computed from the deterministic identity with seed
 // 7f9c2ba4e88f827d616045507605853ed73b8093f6efbc88eb1a6eacfa66ef26 (the
-// same seed as the internal/box v1 golden fixtures), verified by hand with
+// same seed as the box v1 golden fixtures), verified by hand with
 // "printf 'PK' | openssl dgst -sha256" style tooling. The inline
 // crypto/sha256.Sum256 call goes straight to the standard library and does
 // not share code with contactFingerprint, so the test cannot validate a

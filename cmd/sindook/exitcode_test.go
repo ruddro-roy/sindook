@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ruddro-roy/sindook/internal/box"
+	"github.com/ruddro-roy/sindook/box"
 )
 
 func TestExitCode(t *testing.T) {

@@ -6,8 +6,8 @@ import (
 	"io"
 	"os"
 
+	"github.com/ruddro-roy/sindook/box"
 	"github.com/ruddro-roy/sindook/internal/armor"
-	"github.com/ruddro-roy/sindook/internal/box"
 )
 
 const usageSeal = `usage: sindook seal [-r RECIPIENT]... [-R FILE]... [-p | -passfile FILE]

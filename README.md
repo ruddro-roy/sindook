@@ -208,6 +208,11 @@ implement the X-Wing expansion and combiner, about 60 lines, validated
 against the draft's Appendix C vectors on every CI run and importable as
 `github.com/ruddro-roy/sindook/xwing` (draft-stable until the RFC).
 
+The sealing engine is also a public Go library:
+`github.com/ruddro-roy/sindook/box` exposes Seal, Open, Rewrap, and
+Inspect for embedding in other tools, with the same compatibility policy
+as the CLI ([docs/COMPATIBILITY.md](docs/COMPATIBILITY.md)).
+
 One random file key per file, wrapped once per slot and bound to the file
 as associated data. The whole header is sealed by a MAC that only a file
 key holder can compute, and slots are length-prefixed so future algorithms

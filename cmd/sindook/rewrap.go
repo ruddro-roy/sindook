@@ -7,8 +7,8 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/ruddro-roy/sindook/box"
 	"github.com/ruddro-roy/sindook/internal/armor"
-	"github.com/ruddro-roy/sindook/internal/box"
 	"github.com/ruddro-roy/sindook/internal/memguard"
 	"github.com/ruddro-roy/sindook/xwing"
 )

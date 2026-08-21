@@ -57,7 +57,7 @@ func TestLockAllDoesNotOOMWithPassphrase(t *testing.T) {
 	errCh := make(chan error, 1)
 	go func() {
 		// Same parameters as box.DefaultArgon2id (m=64 MiB, t=3, p=4).
-		// We call argon2 directly to avoid an import cycle with internal/box.
+		// We call argon2 directly to avoid an import cycle with box.
 		defer func() {
 			if r := recover(); r != nil {
 				errCh <- r.(error)

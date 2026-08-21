@@ -105,7 +105,7 @@ jobs:
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: |
-            internal/box/testdata/fuzz
+            box/testdata/fuzz
             xwing/testdata/fuzz
             internal/armor/testdata/fuzz
             ~/.cache/go
@@ -162,7 +162,7 @@ jobs:
         timeout-minutes: 10
         run: |
           for target in FuzzOpenRecipient FuzzOpenPassphrase FuzzSealOpenRoundTrip FuzzBitFlip; do
-            go test ./internal/box -run='^$' -fuzz="^${target}\$" -fuzztime=30s -count=1
+            go test ./box -run='^$' -fuzz="^${target}\$" -fuzztime=30s -count=1
           done
           go test ./xwing -run='^$' -fuzz='^FuzzDecapsulate$' -fuzztime=30s -count=1
           go test ./internal/armor -run='^$' -fuzz='^FuzzArmor$' -fuzztime=30s -count=1

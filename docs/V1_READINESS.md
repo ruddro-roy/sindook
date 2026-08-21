@@ -25,9 +25,21 @@ of v0.8.1. See docs/CHANGELOG.md.)
   and a verify job that re-checks checksums, Sigstore signature, SBOM, and
   build provenance before promoting the draft to public.
 - Compatibility fixtures produced by the released v0.6.0 binary
-  (`internal/box/testdata/v060-*.sindook`), pinned into the test suite.
+  (`box/testdata/v060-*.sindook`), pinned into the test suite.
 - Installer and package-manifest improvements: fail-closed installer
   checksum handling and multi-file winget manifests.
+
+## Completed in v0.9 development
+
+- Public Go API decision: `box` (seal, open, rewrap, inspect, selftest)
+  and `xwing` are the public, versioned library API with the stability
+  policy in docs/COMPATIBILITY.md; the engine moved from `internal/box`
+  to the top-level `box` package, and everything under `internal/` is
+  explicitly not an API.
+- Continuous fuzzing: all fifteen declared fuzz targets build under
+  derived guards, daily batch runs persist and prune a corpus on the
+  `corpora` branch, and the workflow fails if corpus storage stops
+  advancing.
 
 ## Required before v0.9.0
 
@@ -41,9 +53,6 @@ of v0.8.1. See docs/CHANGELOG.md.)
 
 ## Required before v0.9.0
 
-- Public Go API decision: either publish a supported, versioned library
-  API (with a stability policy) or state explicitly that only the CLI and
-  the `xwing` package are public, as currently documented.
 - Automated cross-platform installer validation on real Windows, macOS,
   and Linux hosts (PowerShell installer on Windows in particular), not
   only syntax checks in CI.

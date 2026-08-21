@@ -5,6 +5,9 @@
 // authenticated 64 KiB chunks. Slots are length-prefixed so future
 // algorithms can be added without breaking old readers. Files written by
 // format v1 remain readable. The byte layout is specified in docs/FORMAT.md.
+//
+// This package is sindook's public library API, alongside xwing; its
+// stability policy is documented in docs/COMPATIBILITY.md.
 package box
 
 import (

@@ -19,14 +19,14 @@ go get github.com/AdamKorcz/go-118-fuzz-build/testing@fc5dc53b9db8
 # prefix of another fuzz function in the same package, because it greps
 # "func Name" as a substring. The _v2 wrapper matches "func Name(" exactly
 # and fails hard on ambiguity.
-compile_native_go_fuzzer_v2 github.com/ruddro-roy/sindook/internal/box FuzzOpenRecipient fuzz_box_open
-compile_native_go_fuzzer_v2 github.com/ruddro-roy/sindook/internal/box FuzzOpenPassphrase fuzz_box_open_passphrase
-compile_native_go_fuzzer_v2 github.com/ruddro-roy/sindook/internal/box FuzzSealOpenRoundTrip fuzz_box_seal_open_round_trip
-compile_native_go_fuzzer_v2 github.com/ruddro-roy/sindook/internal/box FuzzBitFlip fuzz_box_bit_flip
-compile_native_go_fuzzer_v2 github.com/ruddro-roy/sindook/internal/box FuzzOpen fuzz_box_open_any
-compile_native_go_fuzzer_v2 github.com/ruddro-roy/sindook/internal/box FuzzRewrap fuzz_box_rewrap
-compile_native_go_fuzzer_v2 github.com/ruddro-roy/sindook/internal/box FuzzRewrapRoundTrip fuzz_box_rewrap_round_trip
-compile_native_go_fuzzer_v2 github.com/ruddro-roy/sindook/internal/box FuzzInspect fuzz_box_inspect
+compile_native_go_fuzzer_v2 github.com/ruddro-roy/sindook/box FuzzOpenRecipient fuzz_box_open
+compile_native_go_fuzzer_v2 github.com/ruddro-roy/sindook/box FuzzOpenPassphrase fuzz_box_open_passphrase
+compile_native_go_fuzzer_v2 github.com/ruddro-roy/sindook/box FuzzSealOpenRoundTrip fuzz_box_seal_open_round_trip
+compile_native_go_fuzzer_v2 github.com/ruddro-roy/sindook/box FuzzBitFlip fuzz_box_bit_flip
+compile_native_go_fuzzer_v2 github.com/ruddro-roy/sindook/box FuzzOpen fuzz_box_open_any
+compile_native_go_fuzzer_v2 github.com/ruddro-roy/sindook/box FuzzRewrap fuzz_box_rewrap
+compile_native_go_fuzzer_v2 github.com/ruddro-roy/sindook/box FuzzRewrapRoundTrip fuzz_box_rewrap_round_trip
+compile_native_go_fuzzer_v2 github.com/ruddro-roy/sindook/box FuzzInspect fuzz_box_inspect
 compile_native_go_fuzzer_v2 github.com/ruddro-roy/sindook/internal/armor FuzzArmor fuzz_armor
 compile_native_go_fuzzer_v2 github.com/ruddro-roy/sindook/internal/armor FuzzArmorReader fuzz_armor_reader
 compile_native_go_fuzzer_v2 github.com/ruddro-roy/sindook/internal/armor FuzzIsArmored fuzz_is_armored
