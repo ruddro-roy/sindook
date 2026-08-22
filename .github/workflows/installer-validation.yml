@@ -54,6 +54,7 @@ jobs:
           sindook doctor
           printf 'installer validation payload\n' > secret.txt
           sindook seal secret.txt
+          rm secret.txt
           sindook open secret.txt.sindook
           test "$(cat secret.txt)" = 'installer validation payload'
           echo "installer validation round trip OK on $(uname -s)/$(uname -m)"
