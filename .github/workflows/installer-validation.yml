@@ -58,3 +58,31 @@ jobs:
           sindook open secret.txt.sindook
           test "$(cat secret.txt)" = 'installer validation payload'
           echo "installer validation round trip OK on $(uname -s)/$(uname -m)"
+  tagged-module:
+    name: go install from tag
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve the latest release tag
+        id: tag
+        run: |
+          url=$(curl -fsSL -o /dev/null -w '%{url_effective}' https://github.com/ruddro-roy/sindook/releases/latest)
+          tag=${url##*/}
+          case "$tag" in
+            v*) echo "tag=$tag" >> "$GITHUB_OUTPUT" ;;
+            *) echo "no release resolved (got '$tag')" >&2; exit 1 ;;
+          esac
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: stable
+      - name: Install and verify the module path
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          go install "github.com/ruddro-roy/sindook/cmd/sindook@${TAG}"
+          want="sindook ${TAG#v}"
+          got="$(sindook version)"
+          case "$got" in
+            "$want"|"$want ("*) echo "module install OK: $got" ;;
+            *) echo "version mismatch: got '$got', want '$want'" >&2; exit 1 ;;
+          esac
+          sindook selftest >/dev/null

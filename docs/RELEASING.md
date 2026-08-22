@@ -2,6 +2,25 @@
 
 The release workflow runs only when a `v*` tag is pushed. Ordinary branch pushes cannot publish a release. The pipeline is gated and draft-first: CI must pass on the tagged commit before a GitHub release is created, and a release stays a draft until a verification job has re-checked every artifact.
 
+## Recovering from a broken release
+
+Tags are immutable. If a published release turns out to be broken:
+
+1. Do not move or delete the tag. Leave the broken release published.
+2. Fix the problem on main with a regression test that fails on the
+   broken code.
+3. Cut the next patch version through the normal pipeline (CI gate,
+   draft-first, verification job).
+4. After the patch is public, verify the recovery end to end:
+   `scripts/verify-release.sh X.Y.Z`, `scripts/verify-reproducibility.sh
+   vX.Y.Z`, and a manual run of the installer-validation workflow
+   (Actions tab), which installs the latest release on real Windows,
+   macOS, and Linux hosts and runs the tagged-module `go install` check.
+5. Record the incident and the fix in docs/CHANGELOG.md.
+
+This drill gets a real exercise the first time a release breaks; until
+then it stays a documented procedure, not a claim.
+
 ## Verifying reproducibility
 
 Release binaries are reproducible: building from a tag with the release

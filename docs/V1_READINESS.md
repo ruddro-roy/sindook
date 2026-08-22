@@ -48,6 +48,10 @@ of v0.8.1. See docs/CHANGELOG.md.)
   macOS) and install.ps1 (Windows) on real runner hosts and exercises
   version, selftest, doctor, and a seal/open round trip; a weekly
   schedule revalidates the latest release.
+- Tagged-module install verification: the installer-validation workflow's
+  go-install-from-tag job installs `cmd/sindook@<latest tag>` with a stock
+  Go toolchain, asserts the reported version matches the tag, and runs
+  selftest; it revalidates on every run and weekly.
 - Reproducible-release procedure: scripts/verify-reproducibility.sh
   rebuilds a tag with the release flags and compares SHA-256 with the
   published binary; verified byte-for-byte for v0.8.1 on darwin/arm64
@@ -56,11 +60,8 @@ of v0.8.1. See docs/CHANGELOG.md.)
 
 ## Required before v0.9.0
 
-- End-to-end verification of each tagged-module install path
-  (`go install ...@vX.Y.Z` reports `sindook X.Y.Z`) recorded in the release
-  checklist after the tag is public.
-- A documented, exercised recovery drill for a broken release: cut a patch
-  version, never move a tag, and verify installers pick the patch up.
+- The recovery drill is documented in docs/RELEASING.md; it gets a real
+  exercise the first time a release breaks (not a claim until then).
 
 ## Mandatory before v1.0.0
 
