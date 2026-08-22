@@ -2,6 +2,23 @@
 
 The release workflow runs only when a `v*` tag is pushed. Ordinary branch pushes cannot publish a release. The pipeline is gated and draft-first: CI must pass on the tagged commit before a GitHub release is created, and a release stays a draft until a verification job has re-checked every artifact.
 
+## Verifying reproducibility
+
+Release binaries are reproducible: building from a tag with the release
+flags (`CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=X.Y.Z"`)
+reproduces the published binary byte-for-byte, verified for v0.8.1 on
+darwin/arm64. Anyone can check a release without trusting the publisher:
+
+```sh
+scripts/verify-reproducibility.sh vX.Y.Z
+```
+
+The script downloads the published archive, verifies it against
+checksums.txt, rebuilds from the tag, and compares SHA-256 hashes.
+Run it after each release and record the result in the release notes.
+A mismatch means the release was built with a different Go toolchain;
+investigate before promoting the draft.
+
 ## Before tagging
 
 Work from a clean checkout of the intended commit and run:

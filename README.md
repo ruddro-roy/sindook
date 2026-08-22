@@ -71,7 +71,8 @@ Everything else is still one line:
 - Stable exit codes and JSON output for scripts, `doctor` and `selftest`
   for diagnosing an installation.
 - Release binaries are checksummed, signed with Sigstore, and carry an
-  SBOM plus GitHub build provenance.
+  SBOM plus GitHub build provenance; anyone can rebuild a release from
+  its tag byte-for-byte (`scripts/verify-reproducibility.sh`).
 
 ## When to use it
 

@@ -260,10 +260,16 @@ else
     fail "sindook selftest"
   fi
 
-  if "$bin" doctor >/dev/null 2>&1; then
-    pass "sindook doctor"
+  # Hermetic doctor: point HOME (and XDG_CONFIG_HOME for Linux) at a
+  # scratch root and generate a default identity first, so the check
+  # cannot pass or fail depending on the verifying machine's state.
+  dr="$tmp/doctor-home"
+  mkdir -p "$dr/cfg" "$dr/work"
+  if ( cd "$dr/work" && HOME="$dr" XDG_CONFIG_HOME="$dr/cfg" "$bin" init >/dev/null 2>&1 ) \
+     && ( cd "$dr/work" && HOME="$dr" XDG_CONFIG_HOME="$dr/cfg" "$bin" doctor >/dev/null 2>&1 ); then
+    pass "sindook doctor (hermetic: scratch HOME, generated identity)"
   else
-    fail "sindook doctor"
+    fail "sindook doctor (hermetic: scratch HOME, generated identity)"
   fi
 
   rt="$tmp/roundtrip"

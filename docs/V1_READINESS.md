@@ -40,24 +40,27 @@ of v0.8.1. See docs/CHANGELOG.md.)
   derived guards, daily batch runs persist and prune a corpus on the
   `corpora` branch, and the workflow fails if corpus storage stops
   advancing.
+- FreeBSD decision: source-only, documented in docs/COMPATIBILITY.md —
+  the pure-Go code paths support it, but no CI runner or maintainer
+  hardware exists to guarantee artifacts.
+- Automated cross-platform installer validation: the installer-validation
+  workflow installs the released binary through install.sh (Linux,
+  macOS) and install.ps1 (Windows) on real runner hosts and exercises
+  version, selftest, doctor, and a seal/open round trip; a weekly
+  schedule revalidates the latest release.
+- Reproducible-release procedure: scripts/verify-reproducibility.sh
+  rebuilds a tag with the release flags and compares SHA-256 with the
+  published binary; verified byte-for-byte for v0.8.1 on darwin/arm64
+  and documented in docs/RELEASING.md. The release script's doctor
+  check is hermetic (scratch HOME, generated identity).
 
 ## Required before v0.9.0
 
-- FreeBSD release artifacts, or an explicit decision to keep FreeBSD
-  source-only (documented in docs/COMPATIBILITY.md).
 - End-to-end verification of each tagged-module install path
   (`go install ...@vX.Y.Z` reports `sindook X.Y.Z`) recorded in the release
   checklist after the tag is public.
 - A documented, exercised recovery drill for a broken release: cut a patch
   version, never move a tag, and verify installers pick the patch up.
-
-## Required before v0.9.0
-
-- Automated cross-platform installer validation on real Windows, macOS,
-  and Linux hosts (PowerShell installer on Windows in particular), not
-  only syntax checks in CI.
-- A repeatable, documented reproduction procedure for release artifacts
-  (build-from-tag and compare checksums with the published release).
 
 ## Mandatory before v1.0.0
 

@@ -14,7 +14,7 @@ Official release binaries and CI coverage target:
 | Linux | amd64, arm64 | mainstream distributions |
 | macOS | amd64, arm64 | current macOS on Intel and Apple Silicon |
 | Windows | amd64, arm64 | Windows 10/11; arm64 ships and is CI-tested, but it has seen less real-world use than amd64, report issues |
-| FreeBSD | amd64, arm64 | supported by the pure-Go memory-locking and filesystem code paths; no official release archive is built yet, so FreeBSD users install from source |
+| FreeBSD | amd64, arm64 | source-only by decision (v0.9): the pure-Go memory-locking and filesystem code paths support it, but there is no CI runner or maintainer hardware to guarantee artifacts, so no official archive is shipped; `go install github.com/ruddro-roy/sindook/cmd/sindook@vX.Y.Z` or building from source is the supported path |
 
 The command surface, managed-contact config, `-glob` batch selection,
 installers, and shell completion are designed for those targets. Other Go
