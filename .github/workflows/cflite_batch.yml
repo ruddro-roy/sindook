@@ -65,3 +65,16 @@ jobs:
           sanitizer: address
           storage-repo: https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/ruddro-roy/sindook.git
           storage-repo-branch: corpora
+      # Prune merges can die on transient runner conditions (corpus sync
+      # hiccups, disk pressure). One retry keeps the daily cycle alive
+      # without hiding anything: both attempts stay visible in the logs.
+      - name: Prune corpus (retry)
+        if: failure()
+        uses: google/clusterfuzzlite/actions/run_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1 # v1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          fuzz-seconds: 600
+          mode: prune
+          sanitizer: address
+          storage-repo: https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/ruddro-roy/sindook.git
+          storage-repo-branch: corpora
