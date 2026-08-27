@@ -96,11 +96,13 @@ manifests always carry real digests from the latest published release.
 - **winget schema conformance cannot be validated on macOS/Linux** — `winget
   validate` runs only in CI on `windows-latest`. The manifests were modeled
   on a current accepted winget-pkgs zip + nested-portable manifest
-  (Derailed.k9s, June 2026) at ManifestVersion 1.6.0. `PortableCommandAlias:
-  sindook` is schema-valid per the official 1.6.0 installer schema (only
-  when `NestedInstallerType: portable`), though current winget-pkgs
-  manifests rarely use it; omitting it would also work because the alias
-  then defaults to the exe name.
+  (Derailed.k9s, June 2026) at ManifestVersion 1.6.0. The initial
+  submission carried `PortableCommandAlias: sindook` and failed the
+  pipeline's Installation Validation (2026-08-27, no public logs); the
+  alias was removed on retest because current winget-pkgs manifests rarely
+  use it and the command defaults to the exe name anyway. If validation
+  still fails without the alias, the next step is asking the moderators
+  on the PR for the internal log detail.
 - **Windows arm64**: the x64 runners cannot execute an arm64 install. CI
   downloads the arm64 zip and verifies its SHA-256 against the Scoop manifest
   instead.
