@@ -30,8 +30,8 @@ As of this commit:
 
 | Package manager | Status |
 | --- | --- |
-| winget (microsoft/winget-pkgs) | **Submitted 2026-08-27:** [winget-pkgs#425225](https://github.com/microsoft/winget-pkgs/pull/425225) adds `ruddro-roy.sindook` 0.8.1 as a new package (in review). |
-| Scoop (ScoopInstaller/Main) | **Submitted 2026-08-27:** [Main#8454](https://github.com/ScoopInstaller/Main/pull/8454) adds `bucket/sindook.json` 0.8.1 (in review). |
+| winget (microsoft/winget-pkgs) | **Submitted 2026-08-27:** [winget-pkgs#425225](https://github.com/microsoft/winget-pkgs/pull/425225) adds `ruddro-roy.sindook` 0.8.1 as a new package. Checks 01-07 pass; Installation Validation (08) failed with a Defender flag inside the validation sandbox that current signatures do not reproduce (clean-scan evidence posted on the PR). |
+| Scoop (official bucket) | **Live:** [ruddro-roy/scoop-bucket](https://github.com/ruddro-roy/scoop-bucket), auto-synced from each release's checksums.txt. `scoop bucket add sindook https://github.com/ruddro-roy/scoop-bucket`. The ScoopInstaller/Main submission ([Main#8454](https://github.com/ScoopInstaller/Main/pull/8454)) was closed 2026-08-27 under Main's popularity criterion (≥500 stars, ≥150 forks) and is reopenable once met. |
 | AUR | **Prepared, not published.** `packaging/aur/PKGBUILD` builds from source and was verified from a pristine v0.8.1 tarball; publication needs the maintainer's AUR SSH key (see packaging/aur/README.md). |
 | Homebrew (homebrew-core) | **Not submitted.** The formula is live in the `ruddro-roy/sindook` tap; a homebrew-core submission is adoption-gated (core requires notable popularity). |
 
@@ -80,9 +80,11 @@ manifests always carry real digests from the latest published release.
 
 - **Homebrew** (project-local formula):
   `brew install ./packaging/homebrew/sindook.rb`
-- **Scoop** (local manifest):
-  `scoop install packaging/scoop/sindook.json`
-  (a `scoop bucket add` for sindook is a future step)
+- **Scoop** (official bucket):
+  `scoop bucket add sindook https://github.com/ruddro-roy/scoop-bucket`
+  then `scoop install sindook` (the bucket is auto-synced from release
+  checksums.txt; the local manifest at packaging/scoop/sindook.json stays
+  usable for testing)
 - **winget** (local manifests):
   `winget install --manifest packaging/winget/manifests/r/ruddro-roy/sindook/0.8.1 --accept-source-agreements --accept-package-agreements`
 - **Installer scripts**: `curl -fsSL https://raw.githubusercontent.com/ruddro-roy/sindook/main/scripts/install.sh | sh`

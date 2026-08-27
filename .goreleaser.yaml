@@ -10,6 +10,17 @@ project_name: sindook
 release:
   draft: true
 
+# Windows executables carry a VERSIONINFO resource and application manifest
+# (generated as .syso files the Go linker picks up by filename). Unsigned Go
+# binaries without publisher metadata are routinely flagged by Microsoft
+# Defender's ML heuristics (see winget-pkgs PR #425225); embedding identity
+# metadata is the strongest mitigation short of Authenticode signing.
+# The go-winres version is pinned; scripts/verify-reproducibility.sh must use
+# the same version to reproduce Windows binaries byte-for-byte.
+before:
+  hooks:
+    - go run github.com/tc-hib/go-winres@v0.3.3 make --in packaging/winres/winres.json --out cmd/sindook/rsrc --arch amd64,arm64 --file-version {{ .Version }} --product-version {{ .Version }}
+
 builds:
   - main: ./cmd/sindook
     env:
@@ -17,8 +28,12 @@ builds:
     goos: [linux, darwin, windows]
     goarch: [amd64, arm64]
     flags: [-trimpath]
+    # Windows keeps the symbol table and DWARF: stripped (-s -w) unsigned
+    # binaries score worse with antivirus heuristics, and symbols let the
+    # Defender team analyze false-positive submissions. Other platforms stay
+    # stripped for size.
     ldflags:
-      - -s -w -X main.version={{ .Version }}
+      - '{{ if ne .Os "windows" }}-s -w {{ end }}-X main.version={{ .Version }}'
     mod_timestamp: "{{ .CommitTimestamp }}"
 
 archives:
