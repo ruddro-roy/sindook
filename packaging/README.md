@@ -8,15 +8,15 @@ Workstream 3 owns everything under `packaging/`, `scripts/install.sh`,
 
 ```
 packaging/
-  homebrew/sindook.rb          Homebrew formula (project-local, not yet in homebrew-core)
+  homebrew/sindook.rb          Homebrew formula (project-local; tap ruddro-roy/sindook)
   scoop/sindook.json           Scoop manifest (64bit + arm64)
   winget/manifests/r/ruddro-roy/sindook/
-    0.6.0/                     Publishable multi-file manifest for the published v0.6.0 release
+    0.6.0/  0.7.0/  0.8.1/     Published per-version multi-file manifests
       ruddro-roy.sindook.yaml
       ruddro-roy.sindook.installer.yaml
       ruddro-roy.sindook.locale.en-US.yaml
-    0.7.0/                     Publishable multi-file manifest for the published v0.7.0 release
-      ... (same three files)
+  aur/PKGBUILD                 AUR package (source build), prepared for publication
+  aur/README.md                Publication steps (requires the AUR SSH key)
 scripts/
   install.sh                   POSIX sh installer (Linux/macOS), sha256 fail-closed
   install.ps1                  PowerShell installer (Windows), Get-FileHash fail-closed
@@ -30,11 +30,13 @@ As of this commit:
 
 | Package manager | Status |
 | --- | --- |
-| winget (microsoft/winget-pkgs) | **Not published.** The `0.6.0/` and `0.7.0/` manifests are real local manifests; PR to winget-pkgs is a future step. |
-| Scoop (ScoopInstaller buckets) | **Not published.** `packaging/scoop/sindook.json` is real and publishable as a local manifest (Main-bucket criteria TBD). |
-| Homebrew (homebrew-core) | **Not published.** This is a project-local formula; upstream homebrew-core submission is a future step. |
+| winget (microsoft/winget-pkgs) | **Submitted 2026-08-27:** [winget-pkgs#425225](https://github.com/microsoft/winget-pkgs/pull/425225) adds `ruddro-roy.sindook` 0.8.1 as a new package (in review). |
+| Scoop (ScoopInstaller/Main) | **Submitted 2026-08-27:** [Main#8454](https://github.com/ScoopInstaller/Main/pull/8454) adds `bucket/sindook.json` 0.8.1 (in review). |
+| AUR | **Prepared, not published.** `packaging/aur/PKGBUILD` builds from source and was verified from a pristine v0.8.1 tarball; publication needs the maintainer's AUR SSH key (see packaging/aur/README.md). |
+| Homebrew (homebrew-core) | **Not submitted.** The formula is live in the `ruddro-roy/sindook` tap; a homebrew-core submission is adoption-gated (core requires notable popularity). |
 
-Verified against the community repos on 2026-08-16: no `ruddro-roy.sindook`
+The 2026-08-16 probes below were the baseline for both submissions above —
+each PR is the first occurrence of sindook in its community repo:
 in microsoft/winget-pkgs, no `sindook.json` in ScoopInstaller/Main, Extras,
 Java or Versions, and no `Formula/s/sindook.rb` in homebrew-core (all probes
 404 / empty search results).
@@ -72,8 +74,7 @@ Temporary winget manifests created during the hash-fill process use
 `InstallerSha256: 000...` and `ReleaseDate: 1970-01-01` only in real manifest
 fields. The script replaces those fields before it exits successfully, and CI
 has a guard step that fails if any placeholder field remains. Homebrew/Scoop
-manifests always carry real digests; before v0.8.0 is published they track the
-published v0.7.0 release.
+manifests always carry real digests from the latest published release.
 
 ## Using the manifests today
 
@@ -83,7 +84,7 @@ published v0.7.0 release.
   `scoop install packaging/scoop/sindook.json`
   (a `scoop bucket add` for sindook is a future step)
 - **winget** (local manifests):
-  `winget install --manifest packaging/winget/manifests/r/ruddro-roy/sindook/0.7.0 --accept-source-agreements --accept-package-agreements`
+  `winget install --manifest packaging/winget/manifests/r/ruddro-roy/sindook/0.8.1 --accept-source-agreements --accept-package-agreements`
 - **Installer scripts**: `curl -fsSL https://raw.githubusercontent.com/ruddro-roy/sindook/main/scripts/install.sh | sh`
   (or download and run) — supports `SINDOOK_VERSION`, `SINDOOK_INSTALL_DIR`
   (default `~/.local/bin` on Unix, `%LOCALAPPDATA%\sindook\bin` on Windows)
@@ -105,6 +106,7 @@ published v0.7.0 release.
   instead.
 - **Homebrew**: not in homebrew-core; `brew install` from the repo path is
   the current distribution channel.
-- **Scoop autoupdate**: `sindook_$version_windows_<arch>.zip` URLs with a
-  checksums.txt `$sha256\s+$basename\n` regex (the pattern used by accepted
-  Main-bucket manifests such as k9s).
+- **Scoop autoupdate**: `sindook_$version_windows_<arch>.zip` URLs with
+  `hash.url` pointing at the release `checksums.txt` and default
+  checksum-file extraction (no custom regex) — the same pattern as accepted
+  Main-bucket manifests such as flyctl.

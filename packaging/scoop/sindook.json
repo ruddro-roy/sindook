@@ -28,8 +28,7 @@
             }
         },
         "hash": {
-            "url": "https://github.com/ruddro-roy/sindook/releases/download/v$version/checksums.txt",
-            "regex": "$sha256\\s+$basename\\n"
+            "url": "$baseurl/checksums.txt"
         }
     }
 }

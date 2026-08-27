@@ -1,0 +1,45 @@
+# Maintainer: Ruddro Roy <223927316+ruddro-roy@users.noreply.github.com>
+# Prepared for publication to the AUR. See packaging/aur/README.md for the
+# publication steps; this file is also exercised by packaging CI checks
+# (shell syntax and hash verification against the release checksums).
+# Note: `go build` below reproduces the release build flags from
+# scripts/verify-reproducibility.sh so the binary reports the exact tag.
+
+pkgname=sindook
+pkgver=0.8.1
+pkgrel=1
+pkgdesc='Hybrid post-quantum file encryption CLI (X-Wing: X25519 + ML-KEM-768) with key rotation'
+arch=('x86_64' 'aarch64')
+url='https://github.com/ruddro-roy/sindook'
+license=('Apache')
+makedepends=('go')
+source=("$pkgname-$pkgver.tar.gz::https://github.com/ruddro-roy/sindook/archive/refs/tags/v$pkgver.tar.gz")
+sha256sums=('2189f9d166b81ffb4314225d4c42728aee5bc58bc58e3884cf918a7cf5860a7e')
+options=('!strip')
+
+build() {
+	cd "$pkgname-$pkgver"
+	export CGO_ENABLED=0 GOFLAGS=-buildvcs=false GOPATH="$srcdir/gopath" GOCACHE="$srcdir/gocache"
+	go build -trimpath -ldflags "-s -w -X main.version=v$pkgver" -o sindook ./cmd/sindook
+}
+
+check() {
+	cd "$pkgname-$pkgver"
+	./sindook selftest
+}
+
+package() {
+	cd "$pkgname-$pkgver"
+	install -Dm755 sindook -t "$pkgdir/usr/bin"
+	install -Dm644 LICENSE -t "$pkgdir/usr/share/licenses/$pkgname"
+	local man
+	for man in docs/man/*.1; do
+		install -Dm644 "$man" "$pkgdir/usr/share/man/man1/${man##*/}"
+	done
+	install -d "$pkgdir/usr/share/bash-completion/completions"
+	./sindook completion bash > "$pkgdir/usr/share/bash-completion/completions/sindook"
+	install -d "$pkgdir/usr/share/zsh/site-functions"
+	./sindook completion zsh > "$pkgdir/usr/share/zsh/site-functions/_sindook"
+	install -d "$pkgdir/usr/share/fish/vendor_completions.d"
+	./sindook completion fish > "$pkgdir/usr/share/fish/vendor_completions.d/sindook.fish"
+}
