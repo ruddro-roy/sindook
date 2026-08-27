@@ -107,12 +107,19 @@ portable installs and isolated automation). Schema, version 1:
       "public_key": "sindookpk1:...",
       "added_at": "2026-08-16T00:00:00Z"
     }
+  },
+  "groups": {
+    "team": {
+      "members": ["alice"],
+      "added_at": "2026-08-27T00:00:00Z"
+    }
   }
 }
 ```
 
 - `default_identity` is an optional absolute path to a user-owned identity file. Sindook stores the path; it never copies, moves, or rewrites the identity.
 - `contacts` maps portable, case-insensitive names to full public keys.
+- `groups` (added during v0.9 development) maps names to member lists of saved contact names. A group seals to one key slot per distinct member key, in sorted member order. Groups never nest and share the contact namespace, so a name is either a contact or a group, never both. Older binaries ignore the field; configs without it load unchanged.
 
 Migration policy: changes are additive, new optional fields with defaults
 that older versions can ignore. The loader rejects a `version` it does not
@@ -126,6 +133,8 @@ validated for portability (no Windows-reserved names) on load.
 - Private identity files never enter the configuration directory. The config contains only public keys and the default identity's path.
 - Identities are ordinary files (`keygen -o`); their permissions are the user's responsibility, and `keygen` creates them mode `0600` with a mode `0644` `.pub` sidecar on POSIX.
 - `contacts list` prints each contact as `@name` plus a short fingerprint: SHA-256 over the decoded 1216-byte public key, first 16 bytes, lowercase hex, `sha256:` prefix (128-bit collision space; 2^64 collision resistance, for recognition, not authentication). `contacts show NAME` and `contacts list -json` print the full public key.
+- `-r @group` and `rewrap -r @group` expand a saved group to its members' keys, deduplicated; the expansion error for a member whose contact was deleted names the group and member. Removing a contact that any group lists is refused until the group is repaired.
+- `config list -json` reports `default_identity`, `default_identity_set`, `contacts`, and `groups`; `config get default-identity` prints the configured path, and `config set` validates that the identity file exists before storing its absolute path.
 
 ## Sealed files
 

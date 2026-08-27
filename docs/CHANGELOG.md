@@ -9,6 +9,20 @@ clear entry here, as described in [docs/COMPATIBILITY.md](COMPATIBILITY.md).
 
 ### Added
 
+- Recipient groups. `sindook contacts group add team alice bob` saves a
+  named recipient list, and `sindook seal -r @team` (or
+  `sindook rewrap -r @team`) seals to every member, deduplicated, in
+  sorted member order. Groups list saved contacts only (no nesting) and
+  share the contact namespace, so a name is never both; removing a
+  contact that a group lists is refused until the group is repaired.
+  `contacts group list [-json]`, `show`, `add-member`, `remove-member`,
+  and `remove` manage them. The config file gains an additive `groups`
+  section: older sindook binaries ignore it, and configs without it load
+  unchanged.
+- `sindook config` for scripted inspection and change of the managed
+  configuration: `config get default-identity`, `config set
+  default-identity PATH` (validated to exist, stored as an absolute
+  path), `config unset default-identity`, and `config list [-json]`.
 - Public Go library API. The sealing engine moved from `internal/` to the
   top-level `box` package: `github.com/ruddro-roy/sindook/box` exposes
   `Seal`, `SealRecipient`, `SealPassphrase`, `Open`, `Rewrap`, `Inspect`,

@@ -254,6 +254,58 @@ func loadRecipient(s string) ([]byte, error) {
 	return decodeRecipient(b64)
 }
 
+// loadRecipientKeys expands one -r argument into recipient public keys.
+// A contact, a literal key, or a key file yields one key; a group yields
+// one key per member, deduplicated in sorted member order so the slot
+// layout of a sealed file is reproducible.
+func loadRecipientKeys(s string) ([][]byte, error) {
+	if s == "@default" || s == "@me" || s == "@self" || !strings.HasPrefix(s, "@") {
+		pub, err := loadRecipient(s)
+		if err != nil {
+			return nil, err
+		}
+		return [][]byte{pub}, nil
+	}
+	name, err := normalizeContactName(strings.TrimPrefix(s, "@"))
+	if err != nil {
+		return nil, fmt.Errorf("sindook: invalid recipient %s: %w", s, err)
+	}
+	cfg, err := loadSindookConfig()
+	if err != nil {
+		return nil, err
+	}
+	if contact, ok := cfg.Contacts[name]; ok {
+		pub, err := parseSavedPublicKey(contact.PublicKey)
+		if err != nil {
+			return nil, fmt.Errorf("sindook: saved contact @%s has an invalid public key", name)
+		}
+		return [][]byte{pub}, nil
+	}
+	group, ok := cfg.Groups[name]
+	if !ok {
+		return nil, fmt.Errorf("sindook: unknown contact or group @%s; add it with sindook contacts add %s PUBLIC_KEY_OR_FILE", name, name)
+	}
+	var keys [][]byte
+	seen := make(map[string]bool, len(group.Members))
+	for _, member := range group.Members {
+		contact, ok := cfg.Contacts[member]
+		if !ok {
+			return nil, fmt.Errorf("sindook: group @%s member @%s is not a saved contact; re-add the contact or repair the group", name, member)
+		}
+		pub, err := parseSavedPublicKey(contact.PublicKey)
+		if err != nil {
+			return nil, fmt.Errorf("sindook: group @%s member @%s has an invalid public key", name, member)
+		}
+		canonical := canonicalPublicKey(pub)
+		if seen[canonical] {
+			continue
+		}
+		seen[canonical] = true
+		keys = append(keys, pub)
+	}
+	return keys, nil
+}
+
 // loadRecipientsFile reads one public key per line; blank lines and #
 // comments are skipped, so concatenated .pub files work as-is.
 func loadRecipientsFile(path string) ([][]byte, error) {
@@ -295,11 +347,11 @@ func decodeRecipient(b64 string) ([]byte, error) {
 func buildSealOptions(recipients, recipientFiles []string, withPassphrase bool, passfile, promptLabel string) (box.SealOptions, error) {
 	opts := box.SealOptions{Argon: box.DefaultArgon2id}
 	for _, r := range recipients {
-		pub, err := loadRecipient(r)
+		keys, err := loadRecipientKeys(r)
 		if err != nil {
 			return opts, err
 		}
-		opts.Recipients = append(opts.Recipients, pub)
+		opts.Recipients = append(opts.Recipients, keys...)
 	}
 	for _, f := range recipientFiles {
 		pubs, err := loadRecipientsFile(f)

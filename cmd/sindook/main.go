@@ -37,7 +37,8 @@ usage: sindook <command> [flags] [FILE...]
   keygen      create an identity, optionally passphrase-protected
   init        create or select the explicit default identity
   pubkey      print the public key of an identity
-  contacts    save and use named recipient public keys
+  contacts    save and use named recipient public keys and groups
+  config      inspect and change saved settings (default identity)
   paths       show the portable Sindook configuration locations
   seal        encrypt to recipients and/or a passphrase
   open        decrypt with an identity or passphrase
@@ -61,6 +62,7 @@ var commands = map[string]struct {
 	"init":       {cmdInit, usageInit},
 	"pubkey":     {cmdPubkey, usagePubkey},
 	"contacts":   {cmdContacts, usageContacts},
+	"config":     {cmdConfig, usageConfig},
 	"paths":      {cmdPaths, usagePaths},
 	"seal":       {cmdSeal, usageSeal},
 	"open":       {cmdOpen, usageOpen},

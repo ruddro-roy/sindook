@@ -142,13 +142,18 @@ post-quantum recipients and rotation without a full re-encrypt.
     sindook verify FILE.sindook           # check it opens, write nothing
     sindook inspect FILE.sindook          # metadata, no credentials needed
     sindook rewrap -r @bob FILE.sindook   # rotate access
+    sindook config get default-identity   # inspect saved settings
     sindook doctor                        # check the installation
     sindook help seal                     # flags and examples
 
-Save other people's public keys once, then use names:
+Save other people's public keys once, then use names. A group seals to
+every member, deduplicated, and membership rotates with one command:
 
     sindook contacts add alice alice.key.pub
     sindook seal -r @alice -r @bob budget.xlsx
+    sindook contacts group add team alice bob
+    sindook seal -r @team budget.xlsx
+    sindook contacts group add-member team carol
 
 Rotate access in place. Fast mode keeps the payload ciphertext as is; use
 `-deep` when a removed recipient must not open the replacement file:

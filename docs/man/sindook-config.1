@@ -1,0 +1,38 @@
+.TH SINDOOK-CONFIG 1 "2026-08-27" "sindook 0.8.1" "User Commands"
+.SH NAME
+sindook-config \- inspect and change saved settings
+.SH SYNOPSIS
+.B sindook config list
+[\fB\-json\fP]
+.br
+.B sindook config get
+\fIKEY\fP
+.br
+.B sindook config set
+\fIKEY VALUE\fP
+.br
+.B sindook config unset
+\fIKEY\fP
+.SH DESCRIPTION
+Inspects and changes Sindook's managed configuration: the same public
+data the \fBinit\fP and \fBcontacts\fP commands maintain, exposed for
+setup scripts and dotfiles. The configuration never contains private
+keys or passphrases.
+.SH KEYS
+.TP
+.B default-identity
+the identity used when no \fB\-i\fP is given. \fBset\fP validates that
+the file exists and stores its absolute path.
+.SH EXAMPLES
+.nf
+sindook config get default-identity
+sindook config set default-identity ~/keys/work.key
+sindook config unset default-identity
+sindook config list
+sindook config list -json
+.fi
+.SH SEE ALSO
+.BR sindook (1),
+.BR sindook-init (1),
+.BR sindook-contacts (1),
+.BR sindook-paths (1)

@@ -1,19 +1,30 @@
-.TH SINDOOK-CONTACTS 1 "2026-08-18" "sindook 0.8.1" "User Commands"
+.TH SINDOOK-CONTACTS 1 "2026-08-27" "sindook 0.8.1" "User Commands"
 .SH NAME
-sindook-contacts \- save and use named recipient public keys
+sindook-contacts \- save and use named recipient public keys and groups
 .SH SYNOPSIS
 .B sindook contacts
 [\fBlist\fP [\fB\-json\fP] | \fBadd\fP [\fB\-f\fP] \fINAME\fP
 \fIPUBLIC_KEY_OR_FILE\fP | \fBshow\fP \fINAME\fP | \fBremove\fP \fINAME\fP]
+.br
+.B sindook contacts group
+[\fBadd\fP [\fB\-f\fP] \fINAME\fP \fIMEMBER\fP... |
+\fBlist\fP [\fB\-json\fP] | \fBshow\fP \fINAME\fP |
+\fBadd\-member\fP \fINAME\fP \fIMEMBER\fP... |
+\fBremove\-member\fP \fINAME\fP \fIMEMBER\fP... |
+\fBremove\fP \fINAME\fP]
 .SH DESCRIPTION
 Saves shareable recipient public keys under portable,
 case-insensitive names. Use a saved contact anywhere a recipient is
-accepted, for example \fB\-r @alice\fP. The configuration file
-contains public keys and an optional default identity path only; it
-never contains private keys or passphrases. The fingerprint shown by
-\fBlist\fP is the first 16 bytes of SHA\-256 over the decoded public
-key, lowercase hex with a \fBsha256:\fP prefix: a 128\-bit collision
-space used to recognize a contact at a glance, not to authenticate it.
+accepted, for example \fB\-r @alice\fP. A group is a named recipient
+list: \fB\-r @team\fP seals to every member, deduplicated, in sorted
+member order. Groups list saved contacts only (no nesting), and names
+are shared between contacts and groups, so one name is never both. The
+configuration file contains public keys, group member lists, and an
+optional default identity path only; it never contains private keys or
+passphrases. The fingerprint shown by \fBlist\fP is the first 16 bytes
+of SHA\-256 over the decoded public key, lowercase hex with a
+\fBsha256:\fP prefix: a 128\-bit collision space used to recognize a
+contact at a glance, not to authenticate it.
 .SH SUBCOMMANDS
 .TP
 .B list
@@ -29,16 +40,46 @@ contact
 print one saved public key
 .TP
 \fBremove\fP \fINAME\fP
-delete a saved contact
+delete a saved contact; refused while any group lists the contact
+.TP
+.B group add
+[\fB\-f\fP] \fINAME\fP \fIMEMBER\fP...
+create a group of saved contacts; \fB\-f\fP replaces an existing group
+.TP
+.B group list
+list saved groups with their members (with \fB\-json\fP: one JSON array
+of groups with name, members, and added_at)
+.TP
+.B group show
+\fINAME\fP
+print the members of a group, one name per line
+.TP
+.B group add\-member
+\fINAME\fP \fIMEMBER\fP...
+add saved contacts to a group
+.TP
+.B group remove\-member
+\fINAME\fP \fIMEMBER\fP...
+remove members from a group; a group keeps at least one member
+.TP
+.B group remove
+\fINAME\fP
+delete a group; the contacts themselves are kept
 .SH EXAMPLES
 .nf
 sindook contacts add alice alice.key.pub
-sindook contacts add finance-team team.keys
+sindook contacts add bob bob.key.pub
 sindook contacts list
 sindook seal -r @alice report.pdf
+sindook contacts group add team alice bob
+sindook seal -r @team report.pdf
+sindook contacts group add-member team carol
+sindook contacts group remove-member team bob
+sindook contacts group remove team
 sindook contacts remove alice
 .fi
 .SH SEE ALSO
 .BR sindook (1),
+.BR sindook-config (1),
 .BR sindook-paths (1),
 .BR sindook-seal (1)

@@ -25,6 +25,7 @@ type sindookConfig struct {
 	Version         int                     `json:"version"`
 	DefaultIdentity string                  `json:"default_identity,omitempty"`
 	Contacts        map[string]savedContact `json:"contacts,omitempty"`
+	Groups          map[string]savedGroup   `json:"groups,omitempty"`
 }
 
 type savedContact struct {
@@ -32,8 +33,20 @@ type savedContact struct {
 	AddedAt   string `json:"added_at"`
 }
 
+// savedGroup is a named recipient list. Members are saved contact names;
+// groups never nest, so anyone holding the config can enumerate exactly
+// who a group resolves to.
+type savedGroup struct {
+	Members []string `json:"members"`
+	AddedAt string   `json:"added_at"`
+}
+
 func newSindookConfig() sindookConfig {
-	return sindookConfig{Version: configVersion, Contacts: make(map[string]savedContact)}
+	return sindookConfig{
+		Version:  configVersion,
+		Contacts: make(map[string]savedContact),
+		Groups:   make(map[string]savedGroup),
+	}
 }
 
 // sindookConfigDir follows each operating system's normal per-user config
@@ -94,6 +107,29 @@ func loadSindookConfig() (sindookConfig, error) {
 			return sindookConfig{}, fmt.Errorf("sindook: saved contact @%s has an invalid public key", name)
 		}
 	}
+	if cfg.Groups == nil {
+		cfg.Groups = make(map[string]savedGroup)
+	}
+	for name, group := range cfg.Groups {
+		normalized, err := normalizeContactName(name)
+		if err != nil || normalized != name {
+			return sindookConfig{}, fmt.Errorf("sindook: invalid saved group name %q", name)
+		}
+		if len(group.Members) == 0 {
+			return sindookConfig{}, fmt.Errorf("sindook: saved group @%s has no members", name)
+		}
+		seen := make(map[string]bool, len(group.Members))
+		for _, raw := range group.Members {
+			member, err := normalizeContactName(raw)
+			if err != nil || member != raw {
+				return sindookConfig{}, fmt.Errorf("sindook: saved group @%s has an invalid member name %q", name, raw)
+			}
+			if seen[member] {
+				return sindookConfig{}, fmt.Errorf("sindook: saved group @%s lists @%s twice", name, member)
+			}
+			seen[member] = true
+		}
+	}
 	return cfg, nil
 }
 
@@ -101,6 +137,9 @@ func saveSindookConfig(cfg sindookConfig) error {
 	cfg.Version = configVersion
 	if cfg.Contacts == nil {
 		cfg.Contacts = make(map[string]savedContact)
+	}
+	if cfg.Groups == nil {
+		cfg.Groups = make(map[string]savedGroup)
 	}
 	dir, err := sindookConfigDir()
 	if err != nil {
@@ -252,6 +291,34 @@ func loadContact(name string) ([]byte, error) {
 	return pub, nil
 }
 
+// ensureNameFree keeps the @name namespace unambiguous: a name is either a
+// contact or a group, never both, so @team always means the same thing.
+func ensureNameFree(cfg sindookConfig, name string) error {
+	if _, ok := cfg.Contacts[name]; ok {
+		return fmt.Errorf("sindook: @%s is a saved contact; contacts and groups share one namespace", name)
+	}
+	if _, ok := cfg.Groups[name]; ok {
+		return fmt.Errorf("sindook: @%s is a saved group; contacts and groups share one namespace", name)
+	}
+	return nil
+}
+
+// groupsContaining names every group that lists name as a member, sorted,
+// so removing a contact can refuse until the groups naming it are fixed.
+func groupsContaining(cfg sindookConfig, name string) []string {
+	var groups []string
+	for group, saved := range cfg.Groups {
+		for _, member := range saved.Members {
+			if member == name {
+				groups = append(groups, group)
+				break
+			}
+		}
+	}
+	sort.Strings(groups)
+	return groups
+}
+
 const usageInit = `usage: sindook init [-i IDENTITY | -o FILE] [-p] [-passfile FILE]
                     [-identity-passfile FILE] [-f]
 
@@ -354,18 +421,28 @@ func setDefaultIdentity(path string) error {
 
 const usageContacts = `usage: sindook contacts [list [-json] | add [-f] NAME PUBLIC_KEY_OR_FILE |
                          show NAME | remove NAME]
+       sindook contacts group [add [-f] NAME MEMBER... | list [-json] |
+                         show NAME | add-member NAME MEMBER... |
+                         remove-member NAME MEMBER... | remove NAME]
 
 Save shareable recipient public keys under portable, case-insensitive names.
-Use a saved contact anywhere a recipient is accepted: -r @alice. The config
-file contains public keys and an optional default identity path only; it never
-contains private keys or passphrases. list prints short sha256 fingerprints;
-use show NAME or -json for full public keys.
+Use a saved contact anywhere a recipient is accepted: -r @alice. A group
+names a saved recipient list: -r @team seals to every member, deduplicated.
+Names are shared between contacts and groups, so one name is never both,
+and groups list contacts only (no nesting). The config file contains public
+keys, group member lists, and an optional default identity path only; it
+never contains private keys or passphrases. contacts list prints short
+sha256 fingerprints; use show NAME or -json for full public keys.
 
 examples:
   sindook contacts add alice alice.key.pub
-  sindook contacts add finance-team team.keys
+  sindook contacts add bob bob.key.pub
+  sindook contacts group add team alice bob
+  sindook seal -r @team report.pdf
   sindook contacts list
-  sindook seal -r @alice report.pdf
+  sindook contacts group list -json
+  sindook contacts group add-member team carol
+  sindook contacts group remove-member team bob
   sindook contacts remove alice
 `
 
@@ -388,6 +465,8 @@ func cmdContacts(args []string) error {
 		return cmdContactsShow(args[1:])
 	case "remove", "rm":
 		return cmdContactsRemove(args[1:])
+	case "group":
+		return cmdContactsGroup(args[1:])
 	default:
 		return usagef("unknown contacts command %q\n\n%s", args[0], usageContacts)
 	}
@@ -461,6 +540,9 @@ func cmdContactsAdd(args []string) error {
 	if _, exists := cfg.Contacts[name]; exists && !*force {
 		return fmt.Errorf("sindook: contact @%s already exists; use -f to replace it", name)
 	}
+	if _, isGroup := cfg.Groups[name]; isGroup {
+		return fmt.Errorf("sindook: @%s is a saved group; contacts and groups share one namespace", name)
+	}
 	cfg.Contacts[name] = savedContact{PublicKey: canonicalPublicKey(pub), AddedAt: time.Now().UTC().Format(time.RFC3339)}
 	if err := saveSindookConfig(cfg); err != nil {
 		return err
@@ -504,11 +586,262 @@ func cmdContactsRemove(args []string) error {
 	if _, ok := cfg.Contacts[name]; !ok {
 		return fmt.Errorf("sindook: unknown contact @%s", name)
 	}
+	if groups := groupsContaining(cfg, name); len(groups) > 0 {
+		quoted := make([]string, len(groups))
+		for i, group := range groups {
+			quoted[i] = "@" + group
+		}
+		return fmt.Errorf("sindook: contact @%s is a member of %s; remove it from the group first with sindook contacts group remove-member", name, strings.Join(quoted, ", "))
+	}
 	delete(cfg.Contacts, name)
 	if err := saveSindookConfig(cfg); err != nil {
 		return err
 	}
 	fmt.Printf("removed contact @%s\n", name)
+	return nil
+}
+
+type groupReport struct {
+	Name    string   `json:"name"`
+	Members []string `json:"members"`
+	AddedAt string   `json:"added_at"`
+}
+
+func cmdContactsGroup(args []string) error {
+	if len(args) == 0 || strings.HasPrefix(args[0], "-") {
+		return cmdContactsGroupList(args)
+	}
+	switch args[0] {
+	case "list":
+		return cmdContactsGroupList(args[1:])
+	case "add":
+		return cmdContactsGroupAdd(args[1:])
+	case "show":
+		return cmdContactsGroupShow(args[1:])
+	case "add-member":
+		return cmdContactsGroupEdit(args[1:], true)
+	case "remove-member", "rm-member":
+		return cmdContactsGroupEdit(args[1:], false)
+	case "remove", "rm":
+		return cmdContactsGroupRemove(args[1:])
+	default:
+		return usagef("unknown contacts group command %q\n\n%s", args[0], usageContacts)
+	}
+}
+
+func sortedGroupReports(cfg sindookConfig) []groupReport {
+	names := make([]string, 0, len(cfg.Groups))
+	for name := range cfg.Groups {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	reports := make([]groupReport, 0, len(names))
+	for _, name := range names {
+		group := cfg.Groups[name]
+		reports = append(reports, groupReport{Name: name, Members: group.Members, AddedAt: group.AddedAt})
+	}
+	return reports
+}
+
+func cmdContactsGroupList(args []string) error {
+	fs := newFlagSet("contacts group list", usageContacts)
+	jsonOut := fs.Bool("json", false, "")
+	parseInterspersedFlags(fs, args)
+	if fs.NArg() != 0 {
+		return usagef("contacts group list takes no positional arguments")
+	}
+	cfg, err := loadSindookConfig()
+	if err != nil {
+		return err
+	}
+	reports := sortedGroupReports(cfg)
+	if *jsonOut {
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		return enc.Encode(reports)
+	}
+	if len(reports) == 0 {
+		fmt.Println("no saved groups; add one with: sindook contacts group add NAME MEMBER...")
+		return nil
+	}
+	for _, report := range reports {
+		members := make([]string, len(report.Members))
+		for i, member := range report.Members {
+			members[i] = "@" + member
+		}
+		fmt.Printf("@%s  %s\n", report.Name, strings.Join(members, ", "))
+	}
+	return nil
+}
+
+// resolveGroupMembers normalizes new member names, refuses duplicates
+// against each other and against existing, and requires every member to be
+// an already-saved contact. The returned names are sorted.
+func resolveGroupMembers(cfg sindookConfig, args []string, existing []string) ([]string, error) {
+	seen := make(map[string]bool, len(existing)+len(args))
+	for _, member := range existing {
+		seen[member] = true
+	}
+	members := make([]string, 0, len(args))
+	for _, arg := range args {
+		member, err := normalizeContactName(arg)
+		if err != nil {
+			return nil, usagef("invalid member name %q: %v", arg, err)
+		}
+		if _, ok := cfg.Contacts[member]; !ok {
+			return nil, fmt.Errorf("sindook: @%s is not a saved contact; add it first with sindook contacts add %s PUBLIC_KEY_OR_FILE", member, member)
+		}
+		if seen[member] {
+			return nil, fmt.Errorf("sindook: @%s is already in the member list", member)
+		}
+		seen[member] = true
+		members = append(members, member)
+	}
+	sort.Strings(members)
+	return members, nil
+}
+
+func cmdContactsGroupAdd(args []string) error {
+	fs := newFlagSet("contacts group add", usageContacts)
+	force := fs.Bool("f", false, "")
+	parseInterspersedFlags(fs, args)
+	if fs.NArg() < 2 {
+		return usagef("contacts group add needs NAME and at least one MEMBER")
+	}
+	name, err := normalizeContactName(fs.Arg(0))
+	if err != nil {
+		return usagef("invalid group name: %v", err)
+	}
+	cfg, err := loadSindookConfig()
+	if err != nil {
+		return err
+	}
+	if _, exists := cfg.Groups[name]; exists {
+		if !*force {
+			return fmt.Errorf("sindook: group @%s already exists; use -f to replace it", name)
+		}
+	} else if err := ensureNameFree(cfg, name); err != nil {
+		return err
+	}
+	members, err := resolveGroupMembers(cfg, fs.Args()[1:], nil)
+	if err != nil {
+		return err
+	}
+	cfg.Groups[name] = savedGroup{Members: members, AddedAt: time.Now().UTC().Format(time.RFC3339)}
+	if err := saveSindookConfig(cfg); err != nil {
+		return err
+	}
+	fmt.Printf("saved group @%s (%d members)\n", name, len(members))
+	return nil
+}
+
+func cmdContactsGroupShow(args []string) error {
+	if len(args) != 1 {
+		return usagef("contacts group show needs one NAME")
+	}
+	name, err := normalizeContactName(args[0])
+	if err != nil {
+		return usagef("invalid group name: %v", err)
+	}
+	cfg, err := loadSindookConfig()
+	if err != nil {
+		return err
+	}
+	group, ok := cfg.Groups[name]
+	if !ok {
+		return fmt.Errorf("sindook: unknown group @%s", name)
+	}
+	for _, member := range group.Members {
+		fmt.Println(member)
+	}
+	return nil
+}
+
+func cmdContactsGroupEdit(args []string, add bool) error {
+	label := "remove-member"
+	if add {
+		label = "add-member"
+	}
+	if len(args) < 2 {
+		return usagef("contacts group %s needs NAME and at least one MEMBER", label)
+	}
+	name, err := normalizeContactName(args[0])
+	if err != nil {
+		return usagef("invalid group name: %v", err)
+	}
+	cfg, err := loadSindookConfig()
+	if err != nil {
+		return err
+	}
+	group, ok := cfg.Groups[name]
+	if !ok {
+		return fmt.Errorf("sindook: unknown group @%s", name)
+	}
+	if add {
+		members, err := resolveGroupMembers(cfg, args[1:], group.Members)
+		if err != nil {
+			return err
+		}
+		group.Members = append(group.Members, members...)
+		sort.Strings(group.Members)
+	} else {
+		removing := make(map[string]bool, len(args)-1)
+		for _, arg := range args[1:] {
+			member, err := normalizeContactName(arg)
+			if err != nil {
+				return usagef("invalid member name %q: %v", arg, err)
+			}
+			removing[member] = true
+		}
+		members := make([]string, 0, len(group.Members))
+		for _, member := range group.Members {
+			if removing[member] {
+				delete(removing, member)
+				continue
+			}
+			members = append(members, member)
+		}
+		if len(removing) > 0 {
+			unknown := make([]string, 0, len(removing))
+			for member := range removing {
+				unknown = append(unknown, "@"+member)
+			}
+			sort.Strings(unknown)
+			return fmt.Errorf("sindook: group @%s has no member %s", name, strings.Join(unknown, ", "))
+		}
+		if len(members) == 0 {
+			return fmt.Errorf("sindook: group @%s needs at least one member; remove the group with sindook contacts group remove %s", name, name)
+		}
+		group.Members = members
+	}
+	cfg.Groups[name] = group
+	if err := saveSindookConfig(cfg); err != nil {
+		return err
+	}
+	fmt.Printf("saved group @%s (%d members)\n", name, len(group.Members))
+	return nil
+}
+
+func cmdContactsGroupRemove(args []string) error {
+	if len(args) != 1 {
+		return usagef("contacts group remove needs one NAME")
+	}
+	name, err := normalizeContactName(args[0])
+	if err != nil {
+		return usagef("invalid group name: %v", err)
+	}
+	cfg, err := loadSindookConfig()
+	if err != nil {
+		return err
+	}
+	if _, ok := cfg.Groups[name]; !ok {
+		return fmt.Errorf("sindook: unknown group @%s", name)
+	}
+	delete(cfg.Groups, name)
+	if err := saveSindookConfig(cfg); err != nil {
+		return err
+	}
+	fmt.Printf("removed group @%s\n", name)
 	return nil
 }
 
@@ -525,6 +858,7 @@ type pathsReport struct {
 	DefaultIdentity      string `json:"default_identity,omitempty"`
 	DefaultIdentityReady bool   `json:"default_identity_ready"`
 	Contacts             int    `json:"contacts"`
+	Groups               int    `json:"groups"`
 }
 
 func cmdPaths(args []string) error {
@@ -547,6 +881,7 @@ func cmdPaths(args []string) error {
 		ConfigFile:      filepath.Join(dir, "config.json"),
 		DefaultIdentity: cfg.DefaultIdentity,
 		Contacts:        len(cfg.Contacts),
+		Groups:          len(cfg.Groups),
 	}
 	if cfg.DefaultIdentity != "" {
 		if info, err := os.Stat(cfg.DefaultIdentity); err == nil && info.Mode().IsRegular() {
@@ -568,5 +903,161 @@ func cmdPaths(args []string) error {
 		fmt.Printf("default identity: %s (missing)\n", report.DefaultIdentity)
 	}
 	fmt.Printf("saved contacts: %d\n", report.Contacts)
+	fmt.Printf("saved groups: %d\n", report.Groups)
+	return nil
+}
+
+const usageConfig = `usage: sindook config list [-json]
+                    sindook config get KEY
+                    sindook config set KEY VALUE
+                    sindook config unset KEY
+
+Inspect and change Sindook's managed configuration: the same public data
+the init and contacts commands maintain. The configuration never contains
+private keys or passphrases.
+
+keys:
+  default-identity   identity used when no -i is given; set validates that
+                     the file exists and stores its absolute path
+
+examples:
+  sindook config get default-identity
+  sindook config set default-identity ~/keys/work.key
+  sindook config unset default-identity
+  sindook config list
+`
+
+// configKeys is the complete set of user-settable keys; unknown-key errors
+// are built from it so a new key cannot be forgotten in the diagnostics.
+var configKeys = []string{"default-identity"}
+
+func unknownConfigKey(key string) error {
+	return usagef("unknown config key %q; valid keys: %s", key, strings.Join(configKeys, ", "))
+}
+
+type configReport struct {
+	DefaultIdentity    string `json:"default_identity"`
+	DefaultIdentitySet bool   `json:"default_identity_set"`
+	Contacts           int    `json:"contacts"`
+	Groups             int    `json:"groups"`
+}
+
+func cmdConfig(args []string) error {
+	if len(args) == 0 {
+		return cmdConfigList(nil)
+	}
+	switch args[0] {
+	case "list":
+		return cmdConfigList(args[1:])
+	case "get":
+		return cmdConfigGet(args[1:])
+	case "set":
+		return cmdConfigSet(args[1:])
+	case "unset":
+		return cmdConfigUnset(args[1:])
+	default:
+		return usagef("unknown config command %q\n\n%s", args[0], usageConfig)
+	}
+}
+
+func cmdConfigList(args []string) error {
+	fs := newFlagSet("config list", usageConfig)
+	jsonOut := fs.Bool("json", false, "")
+	parseInterspersedFlags(fs, args)
+	if fs.NArg() != 0 {
+		return usagef("config list takes no positional arguments")
+	}
+	cfg, err := loadSindookConfig()
+	if err != nil {
+		return err
+	}
+	report := configReport{
+		DefaultIdentity:    cfg.DefaultIdentity,
+		DefaultIdentitySet: cfg.DefaultIdentity != "",
+		Contacts:           len(cfg.Contacts),
+		Groups:             len(cfg.Groups),
+	}
+	if *jsonOut {
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		return enc.Encode(report)
+	}
+	if report.DefaultIdentitySet {
+		fmt.Printf("default-identity: %s\n", report.DefaultIdentity)
+	} else {
+		fmt.Println("default-identity: (not set)")
+	}
+	fmt.Printf("contacts: %d\n", report.Contacts)
+	fmt.Printf("groups: %d\n", report.Groups)
+	return nil
+}
+
+func cmdConfigGet(args []string) error {
+	if len(args) != 1 {
+		return usagef("config get needs one KEY")
+	}
+	if args[0] != "default-identity" {
+		return unknownConfigKey(args[0])
+	}
+	cfg, err := loadSindookConfig()
+	if err != nil {
+		return err
+	}
+	if cfg.DefaultIdentity == "" {
+		return errors.New("sindook: default-identity is not set; configure it with sindook config set default-identity PATH or sindook init")
+	}
+	fmt.Println(cfg.DefaultIdentity)
+	return nil
+}
+
+func cmdConfigSet(args []string) error {
+	if len(args) != 2 {
+		return usagef("config set needs KEY and VALUE")
+	}
+	if args[0] != "default-identity" {
+		return unknownConfigKey(args[0])
+	}
+	info, err := os.Stat(args[1])
+	if err != nil {
+		return fmt.Errorf("sindook: identity %s does not exist", args[1])
+	}
+	if !info.Mode().IsRegular() {
+		return fmt.Errorf("sindook: identity %s is not a regular file", args[1])
+	}
+	abs, err := filepath.Abs(args[1])
+	if err != nil {
+		return err
+	}
+	cfg, err := loadSindookConfig()
+	if err != nil {
+		return err
+	}
+	cfg.DefaultIdentity = abs
+	if err := saveSindookConfig(cfg); err != nil {
+		return err
+	}
+	fmt.Fprintf(os.Stderr, "default identity: %s\n", abs)
+	return nil
+}
+
+func cmdConfigUnset(args []string) error {
+	if len(args) != 1 {
+		return usagef("config unset needs one KEY")
+	}
+	if args[0] != "default-identity" {
+		return unknownConfigKey(args[0])
+	}
+	cfg, err := loadSindookConfig()
+	if err != nil {
+		return err
+	}
+	if cfg.DefaultIdentity == "" {
+		return errors.New("sindook: default-identity is not set")
+	}
+	cfg.DefaultIdentity = ""
+	if err := saveSindookConfig(cfg); err != nil {
+		return err
+	}
+	fmt.Fprintln(os.Stderr, "default identity cleared")
 	return nil
 }

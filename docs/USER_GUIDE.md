@@ -69,7 +69,51 @@ that you are looking at the contact you expect, not to authenticate a key
 `sindook paths` shows the platform-specific config location. It follows the
 normal user configuration location for each OS, and `SINDOOK_CONFIG_DIR` can
 override it for a portable installation or an isolated automation run. The
-config contains only public keys and the default identity's path.
+config contains only public keys, group member lists, and the default
+identity's path.
+
+### Groups
+
+A group is a named recipient list. Sealing to the group expands to one key
+slot per distinct member, in sorted member order, exactly as if you had
+listed each person with `-r`:
+
+```sh
+sindook contacts group add team alice bob
+sindook seal -r @team project-plan.pdf
+sindook contacts group add-member team carol
+sindook contacts group list -json
+```
+
+Two rules keep a group unambiguous: names are shared between contacts and
+groups (a name is never both), and groups list saved contacts only — no
+nesting. Sealing refuses a group whose member's contact has been deleted,
+naming the group and member, and `contacts remove` refuses while any group
+still lists the contact. To take someone out of future files:
+
+```sh
+sindook contacts group remove-member team bob
+```
+
+That changes who future `seal` and `rewrap` calls include. Files already
+sealed to the group keep bob's slot until you `rewrap` them; use
+`rewrap -deep` when a removed member must not be able to open the
+replacement file.
+
+### Scripted configuration
+
+`sindook config` reads and writes the same managed settings the commands
+above maintain, for setup scripts and dotfiles:
+
+```sh
+sindook config get default-identity
+sindook config set default-identity ~/keys/work.key
+sindook config unset default-identity
+sindook config list -json
+```
+
+`set` validates that the identity file exists and stores its absolute
+path. The configuration never contains private keys or passphrases.
 
 ## Create and back up an identity
 
