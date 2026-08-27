@@ -54,7 +54,7 @@ jobs:
           $flagged = $false
           foreach ($arch in @('amd64','arm64')) {
             Write-Host "=== scanning $arch sindook.exe ==="
-            & $mp -Scan -ScanType 3 -DisableRemediation -Path "$PWD\ex_$arch\sindook.exe"
+            & $mp -Scan -ScanType 3 -DisableRemediation -File "$PWD\ex_$arch\sindook.exe"
             $code = $LASTEXITCODE
             Write-Host "MpCmdRun exit code [$arch]: $code (0 = clean, 2 = threat found)"
             if ($code -ne 0) { $flagged = $true }
