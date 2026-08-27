@@ -1,0 +1,68 @@
+# Scan published Windows release binaries with Microsoft Defender on a
+# real Windows runner. Purpose: catch false-positive detections (common
+# for unsigned Go binaries) before package-manager pipelines or users hit
+# them, and produce the detection name needed for a false-positive
+# submission at https://www.microsoft.com/en-us/wdsi/filesubmission.
+#
+# Manually dispatched; optional VERSION input pins a release (default:
+# latest published). Non-zero exit means Defender flagged a binary.
+name: defender-scan
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version to scan, e.g. 0.8.1 (default: latest)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: windows-latest
+    steps:
+      - name: Resolve release version
+        shell: pwsh
+        run: |
+          $v = "${{ inputs.version }}".Trim()
+          if (-not $v) {
+            $v = (Invoke-RestMethod "https://api.github.com/repos/ruddro-roy/sindook/releases/latest").tag_name.TrimStart('v')
+          }
+          "VERSION=$v" >> $env:GITHUB_ENV
+          Write-Host "Scanning v$v"
+      - name: Download and extract release archives
+        shell: pwsh
+        run: |
+          $v = $env:VERSION
+          foreach ($arch in @('amd64','arm64')) {
+            $zip = "sindook_${v}_windows_${arch}.zip"
+            Invoke-WebRequest "https://github.com/ruddro-roy/sindook/releases/download/v$v/$zip" -OutFile $zip
+            Expand-Archive $zip -DestinationPath "ex_$arch"
+            (Get-FileHash "ex_$arch\sindook.exe" -Algorithm SHA256).Hash
+          }
+      - name: Scan with Microsoft Defender
+        shell: pwsh
+        run: |
+          $mp = "C:\Program Files\Windows Defender\MpCmdRun.exe"
+          if (-not (Test-Path $mp)) {
+            $platform = (Resolve-Path "C:\ProgramData\Microsoft\Windows Defender\Platform\*\MpCmdRun.exe") | Select-Object -Last 1
+            $mp = $platform.Path
+          }
+          Write-Host "Using MpCmdRun: $mp"
+          $flagged = $false
+          foreach ($arch in @('amd64','arm64')) {
+            Write-Host "=== scanning $arch sindook.exe ==="
+            & $mp -Scan -ScanType 3 -DisableRemediation -Path "$PWD\ex_$arch\sindook.exe"
+            $code = $LASTEXITCODE
+            Write-Host "MpCmdRun exit code [$arch]: $code (0 = clean, 2 = threat found)"
+            if ($code -ne 0) { $flagged = $true }
+          }
+          if ($flagged) {
+            Write-Host "=== threat details ==="
+            Get-MpThreatDetection -ErrorAction SilentlyContinue | Select-Object InitialDetectionTime, ThreatID, Resources | Format-List
+            Get-MpThreat -ErrorAction SilentlyContinue | Select-Object ThreatName, Resources | Format-List
+            exit 1
+          }
+          Write-Host "Both architectures clean."
