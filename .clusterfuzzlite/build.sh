@@ -19,6 +19,7 @@ compile_native_go_fuzzer_v2 github.com/ruddro-roy/sindook/xwing FuzzDecapsulate 
 compile_native_go_fuzzer_v2 github.com/ruddro-roy/sindook/xwing FuzzEncapsulate fuzz_xwing_encapsulate
 compile_native_go_fuzzer_v2 github.com/ruddro-roy/sindook/xwing FuzzNewPrivateKey fuzz_xwing_new_private_key
 compile_native_go_fuzzer_v2 github.com/ruddro-roy/sindook/xwing FuzzDecapsulateRandomIdentity fuzz_xwing_decapsulate_random_identity
+compile_native_go_fuzzer_v2 github.com/ruddro-roy/sindook/cmd/sindook FuzzLoadBaseline fuzz_cmd_load_baseline
 
 # Guards, so a fuzz target can never go missing silently again:
 # 1. every Fuzz function declared in the repository's test files must be
