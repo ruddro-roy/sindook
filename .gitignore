@@ -13,3 +13,6 @@ COORDINATOR_STATUS.md
 FILE_OWNERS.md
 *.tmp
 *.temp
+
+# local agent-loop scratchpads
+.cursor/
