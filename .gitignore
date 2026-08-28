@@ -16,3 +16,9 @@ FILE_OWNERS.md
 
 # local agent-loop scratchpads
 .cursor/
+
+# agent rule files must never enter the repo
+AGENTS.md
+CLAUDE.md
+CURSOR.md
+GEMINI.md
