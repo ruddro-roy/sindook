@@ -2,8 +2,11 @@ package box
 
 import (
 	"bytes"
+	"compress/gzip"
 	"encoding/base64"
+	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -162,5 +165,176 @@ func TestCurrentFormatRoundTrip(t *testing.T) {
 	out, err = openWith(t, blob, nil, []byte(v060Passphrase))
 	if err != nil || !bytes.Equal(out, []byte(v060Plaintext)) {
 		t.Fatalf("current-format passphrase round trip: %v", err)
+	}
+}
+
+// ---- v0.9.0 fixtures -------------------------------------------------------
+//
+// v090-passphrase.sindook, v090-recipient.sindook, and
+// v090-compressed.sindook were produced by the published v0.9.0 release
+// binary (verified against the release checksums.txt before use), with:
+//
+//	sindook seal -passfile pass.txt -o v090-passphrase.sindook plain.txt
+//	sindook seal -r id.key.pub -o v090-recipient.sindook plain.txt
+//	sindook seal -z -r id.key.pub -o v090-compressed.sindook plain.txt
+//
+// The compressed fixture anchors the compression layer (added in v0.8.0)
+// into the compatibility contract: future code must keep opening
+// compressed files produced by released versions. Compression wraps the
+// plaintext above the encryption layer, so the box test opens to the gzip
+// stream and decompresses it here.
+
+// v090Plaintext is the content sealed into the v0.9.0 fixtures.
+const v090Plaintext = "compatibility fixture: v0.9.0\ncompression and baseline eras\n"
+
+// v090Passphrase opens v090-passphrase.sindook. TEST-ONLY.
+const v090Passphrase = "fixture-passphrase-v090"
+
+// v090IdentityB64 is the base64 of the TEST-ONLY v0.9.0 identity file
+// that opens v090-recipient.sindook and v090-compressed.sindook. It lives
+// here because *.key files are gitignored by design.
+const v090IdentityB64 = `IyBzaW5kb29rIGlkZW50aXR5LCBjcmVhdGVkIDIwMjYtMDgtMjhUMDk6MDc6NTRa
+CiMgcHVibGljOiBzaW5kb29rcGsxOmhyUllCL1plSGJiRXpXZ1EyMW9jQk9wM3Yr
+ckRiOGV0YlVCYTNwcTlzZWswcmpTczQ1QjJYOVdTSktOMXNyVTJ6bForcnNaQXNp
+Rms1amd0cmpkTjJyaW9FbEpGTXNodVM2SWwySEE5Ly9hMTlmT0hURmNGd2dNSUV0
+aGg1K0lpME1sYW94Z2dnd0d4bUR4R0UvTnBCK05yVDlLVDc2Zk9SYWdqMmt2UEI4
+S2ZNVEVLdWNraVZjQWc5cU5MbjBKRWUybFRmUm9LRUJwMEtpbC9udWNLanBSZHNY
+TmFOUGZQNVlhby82QUovbHpIS21VbDBpZDhTck5FeXJkZ3NreDY1RlJOS0dzcVZQ
+bU5MRldqQzhhQkxncFN3dnh0M3hBVEZwWWlkUEtNVkxZU0VtTU9PcVZpakZ5RVJC
+UkhJWVVDV0htSzRSTUFGb3VWMWtxZW8vazlqM0lyemJPWjFpUWxzVkpxM2lpdEk2
+cEZTL3RTaUxJS3duZXRhVE5zNjhRcS9Dd3N0S0VLNDh0SlJpR2FRa09oak1oV1Q0
+Y0trRnAyblBLVDYvU0JXZkd4MEZDdXlXUURNSW8zNDZCSjMyTE9OcW8vTHl5Z0ll
+a0NBYUd3QnRMS01OTTlTY0JyWkZpeVRkeVZueE9NdGdJQTlSZWZTalF6djlkVnFi
+T2ZETEZ6cFN5cmhCaThMSU1rN0V0eW5JZ1hybXVJTEttcVVKaDVxcEFSWGRNUktI
+RnI2NVZjdlFlOFUzVEMxdW0rOHJXczRuWTNJY2VvVHd3NFhmeU54TFl1djVNZEpz
+QVREVXVXM1NaRnVQRm9vNXlZblVtM2lzZDJNenVSWmZFRERpeWptOGRWdmtvYW9v
+b1JpUWdhS3BBT080VEp2ZVI4WUVOV0JKUWpVaFNuQkxJeitHRnBybXV3WXNGSjho
+d1ZpRVF6bDlJei9GaWxOZEF2dExwZi9NdzlWcmVOSjNDVko0Sk5wUXlTTTRHY3VO
+TzhlMVlFejJwK3BqUmJ6T1dyRktKa3VIcFNDY1Y0ZDVWcFdqWkZQQnBLN0dOZVd5
+Y2pXRWtVZEZ5ZTk2aUZBUlp1S01GYXppaThjQWhvQ3dUREtrTEhQblZubllVNE05
+cSt0RFFwNHJpSjJ2R0RnN3duZ3V4Tm03aFQybVlHUEJoMUhEbVc1RmU4ZUZ1cllZ
+czQ1S1Fod2tkYzFFWlZjdWJBeDNLY1owSVBnSUdTVDNrVzM5VVhtU1VDU3V4OXB1
+RzhaV3lRenp1TXQyc2cwT1dCaTZTazdvTUVjdnNUei9POC9qeGp5VkhMTDdtK3RY
+T01Id1FCZ2tIT0pYeUFWdkVhQXVtajd6cW9qbFNUMWhXKzBhaTFxckVKdXRKMWg0
+aHFwK2R4emJzRlNIa2ZIbktrRzZ2REMybGNkNWdsM2hnUU1mbEVzcm00M0NreVJ4
+Z1NNa1lETDZnQnI1ak4vZms2OGRtMzM4UWFTSWlzdWF4UmFzd2pYMEpkZWljWVhJ
+RVFqdUpEVDdvaGNHSExxY2UrVUNBNGs4cUZacnFEd0hDUDdlTVNMR0dCa2FodWtP
+TzA1NXBMOFRhZ0c5QjNFT1djYWVuQ3hWZXpEd3ZOU3JWR0JtVit0eVRCRHlrdkt0
+cHI2VUdTZVVGamRJS2xQT3gzdzdHUlh2eHZvTUUzQ3J1R3htTElUcE9xUlZhVnpu
+bGt2Tnd6bTZmSE52ZU1pWnFjTUJvUUFTZU92Q09hQU5LU0hRVjVFbGRiUHFxS2xX
+ZkZLSFVsTnNuTmZNS2J2d3FBTzdLM3VkZTgxQ1FwMHV1NisxeTR4Rm9GblNDbnRl
+eTBpNnhvSjZnSnFSVStQV3N2cjhWR0xJb1VkalJJMTVMQWMxUW1FNWd5QVFLVndM
+Y1JTMVU2bU5aelRWU25SdUN0aDFacnRvZXJ2S1lmMVBrQlk0SEF1N0Y1UDZ1dXpQ
+ZW5Ia0d0cGVIT1dJTmFIanlTdktXbno5Y20vd3c1SU9zWjFFWnh6SWkzNmJNdWV4
+YVl4Zm9uV0xKczlsZE15bkJ4Z010RzdJdjlmYTBIQ3VzdUVJcHhFWDNXcmZ4QUlv
+K2ZKdTBoK3luQnEvYjYrWjZVbEpocWs2NWNBeUV6QVZmYmF0QmFBOUdQN3M5NVBZ
+Y0pUTTZVQ2pqK0Z3CnNpbmRvb2tzazE6UFdNdGJFYlF4QnMrbDlXTkkwYWZwVVlt
+d0t2U2RmU3JMSU5SK3FMbk5UZwo=`
+
+// v090IdentityKey materializes the embedded v0.9.0 identity and parses
+// it the same way the CLI does.
+func v090IdentityKey(t *testing.T) *xwing.PrivateKey {
+	t.Helper()
+	raw, err := base64.StdEncoding.DecodeString(strings.Join(strings.Fields(v090IdentityB64), ""))
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "v090-id.key")
+	if err := os.WriteFile(path, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	raw, err = os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, line := range strings.Split(string(raw), "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "sindooksk1:") {
+			continue
+		}
+		seed, err := base64.RawStdEncoding.DecodeString(strings.TrimPrefix(line, "sindooksk1:"))
+		if err != nil || len(seed) != xwing.SeedSize {
+			t.Fatalf("embedded v0.9.0 identity is malformed: %v", err)
+		}
+		key, err := xwing.NewPrivateKey(seed)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return key
+	}
+	t.Fatal("embedded v0.9.0 identity has no sindooksk1: entry")
+	return nil
+}
+
+// TestV090Fixtures proves current code opens every fixture produced by
+// the published v0.9.0 binary: plain, recipient, and compressed paths,
+// with negative cases so the fixtures cannot pass through a lenient path.
+func TestV090Fixtures(t *testing.T) {
+	id := v090IdentityKey(t)
+
+	t.Run("passphrase", func(t *testing.T) {
+		blob, err := os.ReadFile("testdata/v090-passphrase.sindook")
+		if err != nil {
+			t.Fatal(err)
+		}
+		out, err := openWith(t, blob, nil, []byte(v090Passphrase))
+		if err != nil {
+			t.Fatalf("v0.9.0 passphrase fixture: %v", err)
+		}
+		if !bytes.Equal(out, []byte(v090Plaintext)) {
+			t.Fatalf("v0.9.0 passphrase fixture plaintext = %q, want %q", out, v090Plaintext)
+		}
+	})
+
+	t.Run("recipient", func(t *testing.T) {
+		blob, err := os.ReadFile("testdata/v090-recipient.sindook")
+		if err != nil {
+			t.Fatal(err)
+		}
+		out, err := openWith(t, blob, id, nil)
+		if err != nil {
+			t.Fatalf("v0.9.0 recipient fixture: %v", err)
+		}
+		if !bytes.Equal(out, []byte(v090Plaintext)) {
+			t.Fatalf("v0.9.0 recipient fixture plaintext = %q, want %q", out, v090Plaintext)
+		}
+	})
+
+	t.Run("compressed", func(t *testing.T) {
+		blob, err := os.ReadFile("testdata/v090-compressed.sindook")
+		if err != nil {
+			t.Fatal(err)
+		}
+		gz, err := openWith(t, blob, id, nil)
+		if err != nil {
+			t.Fatalf("v0.9.0 compressed fixture: %v", err)
+		}
+		zr, err := gzip.NewReader(bytes.NewReader(gz))
+		if err != nil {
+			t.Fatalf("v0.9.0 compressed fixture is not gzip: %v", err)
+		}
+		out, err := io.ReadAll(zr)
+		if err != nil {
+			t.Fatalf("v0.9.0 compressed fixture gunzip: %v", err)
+		}
+		if !bytes.Equal(out, []byte(v090Plaintext)) {
+			t.Fatalf("v0.9.0 compressed fixture plaintext = %q, want %q", out, v090Plaintext)
+		}
+	})
+
+	// Negative cases: wrong credentials must still fail.
+	passBlob, err := os.ReadFile("testdata/v090-passphrase.sindook")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := openWith(t, passBlob, nil, []byte("wrong")); err == nil {
+		t.Fatal("v0.9.0 passphrase fixture opened with a wrong passphrase")
+	}
+	recBlob, err := os.ReadFile("testdata/v090-recipient.sindook")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := openWith(t, recBlob, newIdentity(t), nil); err == nil {
+		t.Fatal("v0.9.0 recipient fixture opened with a stranger identity")
 	}
 }
