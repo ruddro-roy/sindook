@@ -5,10 +5,27 @@ All notable user-visible changes are documented here. The format follows
 uses semantic versioning. Pre-1.0 releases may change commands with a
 clear entry here, as described in [docs/COMPATIBILITY.md](COMPATIBILITY.md).
 
-## [Unreleased]
+## [v0.10.0] - 2026-08-28
 
 ### Added
 
+- `sindook scan`, a read-only cryptographic posture audit in two modes.
+  `scan tls HOST[:PORT]...` checks certificate expiry and key strength,
+  chain and hostname validity, deprecated TLS 1.0/1.1 acceptance
+  (RFC 8996), and whether the server supports a hybrid post-quantum key
+  exchange (X25519MLKEM768 or the SECP+ML-KEM groups); a normal
+  handshake proves reachability before the hybrid-only probe runs, and
+  inconclusive probes are reported as inconclusive instead of guessed.
+  Ports that upgrade with STARTTLS are not supported; scan implicit-TLS
+  ports. `scan files [PATH...]` finds unencrypted private keys, key
+  files with permissive file modes (best effort, platform dependent),
+  expired or soon-expiring certificates, and weak key sizes in commonly
+  named key and certificate files. Findings carry remediations;
+  endpoints that upgrade with STARTTLS, and cipher-suite inventories,
+  are out of scope by design — use a dedicated tool such as testssl.sh
+  alongside scan. Scan endpoints you operate or are authorized to
+  assess. `-json` follows the doctor report envelope, documented in
+  docs/COMPATIBILITY.md.
 - Verification baselines. `sindook verify -save BASELINE` records every
   verified file (path, sealed-file SHA-256, size, timestamp) in a JSON
   baseline; a later `sindook verify -baseline BASELINE` re-verifies and

@@ -270,6 +270,38 @@ sindook inspect -json archive.tar.sindook
 
 Inspection reports the format, slots, and KDF parameters. It cannot authenticate those metadata fields without a credential, so treat the report as a claim until `open` or `verify` succeeds.
 
+## Audit crypto posture with scan
+
+`scan` reports on cryptographic posture without changing anything. Scan
+endpoints you operate or are authorized to assess. Both modes are
+strictly read-only: no exploit payloads, no credential guessing, no
+traffic capture.
+
+```sh
+sindook scan tls mail.example.com:993
+sindook scan files ~/.ssh /etc/ssl/private
+sindook scan tls -json api.example.com | jq '.errors'
+```
+
+`scan tls` checks certificate expiry and key strength, chain and hostname
+validity, deprecated TLS 1.0/1.1 acceptance, and whether the server
+supports a hybrid post-quantum key exchange (`X25519MLKEM768` or the
+SECP+ML-KEM groups). Recorded traffic from endpoints without one may be
+decryptable by a future quantum computer (harvest now, decrypt later).
+Ports that upgrade with STARTTLS (such as 25 and 587) are not supported;
+scan implicit-TLS ports. `scan files` finds unencrypted private keys,
+key files with permissive file modes (best effort, platform dependent),
+expired or soon-expiring certificates, and weak key sizes in commonly
+named key and certificate files.
+
+Each finding carries a remediation, and inconclusive probes say so
+instead of guessing. With `-json`, the report envelope is stable
+([docs/COMPATIBILITY.md](COMPATIBILITY.md)); per-target exit status
+matches `doctor`: non-zero when any check ends in `error`. Scope is
+deliberate: scan answers the post-quantum readiness question. For an
+exhaustive cipher-suite audit, use a dedicated tool such as
+[testssl.sh](https://testssl.sh) alongside it.
+
 ## Rotate access
 
 Fast rewrap replaces key slots without decrypting or re-encrypting the payload:
