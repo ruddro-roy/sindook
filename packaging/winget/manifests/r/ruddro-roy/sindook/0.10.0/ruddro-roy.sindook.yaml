@@ -1,0 +1,9 @@
+# Version manifest for the published Sindook v0.10.0 release.
+# Not yet submitted to microsoft/winget-pkgs. See packaging/README.md.
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.version.1.6.0.schema.json
+
+PackageIdentifier: ruddro-roy.sindook
+PackageVersion: 0.10.0
+DefaultLocale: en-US
+ManifestType: version
+ManifestVersion: 1.6.0

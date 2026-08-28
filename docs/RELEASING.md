@@ -126,6 +126,10 @@ The GitHub Actions release workflow then runs in three gated stages:
    tag. Only when every gate passes is the draft promoted to public. A
    release is never published from a tree whose gates failed, and the
    checksums installers download come from the same verified release.
+   Promotion first applies the matching `docs/CHANGELOG.md` section as
+   the release body (`scripts/release-notes.sh`), replacing goreleaser's
+   generated commit log; a missing section keeps the generated body and
+   never fails the release.
 
 Because stages 2 and 3 both read the immutable tag, an artifact that fails
 verification cannot be "fixed in place": cut a new patch version instead.
@@ -165,6 +169,18 @@ scripts/fill-package-hashes.sh X.Y.Z
 The script fails closed on a missing or mismatched checksum, so a manifest
 can never silently point at an unverified archive. Do not edit the
 manifest hashes by hand.
+
+### Seal the next compatibility fixtures
+
+Every release extends the format-contract fixture chain: files sealed by
+the just-published binary, committed so later releases prove they still
+read them (the v0.9.0 round added `box/testdata/v090-*.sindook` the same
+way). After the release is public, download the released archive for your
+platform, verify it against `checksums.txt`, and seal the fixtures with
+the released binary following the header comment in
+`box/compat_test.go`. Commit the fixtures (and the test cases that open
+them) in a follow-up commit — never before the release exists, because
+the fixtures must be sealed by the published binary, not a local build.
 
 ### Homebrew
 

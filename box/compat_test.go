@@ -231,15 +231,15 @@ K2ZKdTBoK3luQnEvYjYrWjZVbEpocWs2NWNBeUV6QVZmYmF0QmFBOUdQN3M5NVBZ
 Y0pUTTZVQ2pqK0Z3CnNpbmRvb2tzazE6UFdNdGJFYlF4QnMrbDlXTkkwYWZwVVlt
 d0t2U2RmU3JMSU5SK3FMbk5UZwo=`
 
-// v090IdentityKey materializes the embedded v0.9.0 identity and parses
-// it the same way the CLI does.
-func v090IdentityKey(t *testing.T) *xwing.PrivateKey {
+// embeddedIdentityKey decodes a base64 fixture-era identity file and
+// parses it the same way the CLI does; label names the era in errors.
+func embeddedIdentityKey(t *testing.T, b64, label string) *xwing.PrivateKey {
 	t.Helper()
-	raw, err := base64.StdEncoding.DecodeString(strings.Join(strings.Fields(v090IdentityB64), ""))
+	raw, err := base64.StdEncoding.DecodeString(strings.Join(strings.Fields(b64), ""))
 	if err != nil {
 		t.Fatal(err)
 	}
-	path := filepath.Join(t.TempDir(), "v090-id.key")
+	path := filepath.Join(t.TempDir(), label+"-id.key")
 	if err := os.WriteFile(path, raw, 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -254,7 +254,7 @@ func v090IdentityKey(t *testing.T) *xwing.PrivateKey {
 		}
 		seed, err := base64.RawStdEncoding.DecodeString(strings.TrimPrefix(line, "sindooksk1:"))
 		if err != nil || len(seed) != xwing.SeedSize {
-			t.Fatalf("embedded v0.9.0 identity is malformed: %v", err)
+			t.Fatalf("embedded %s identity is malformed: %v", label, err)
 		}
 		key, err := xwing.NewPrivateKey(seed)
 		if err != nil {
@@ -262,8 +262,14 @@ func v090IdentityKey(t *testing.T) *xwing.PrivateKey {
 		}
 		return key
 	}
-	t.Fatal("embedded v0.9.0 identity has no sindooksk1: entry")
+	t.Fatalf("embedded %s identity has no sindooksk1: entry", label)
 	return nil
+}
+
+// v090IdentityKey materializes the embedded v0.9.0 identity.
+func v090IdentityKey(t *testing.T) *xwing.PrivateKey {
+	t.Helper()
+	return embeddedIdentityKey(t, v090IdentityB64, "v0.9.0")
 }
 
 // TestV090Fixtures proves current code opens every fixture produced by
@@ -336,5 +342,139 @@ func TestV090Fixtures(t *testing.T) {
 	}
 	if _, err := openWith(t, recBlob, newIdentity(t), nil); err == nil {
 		t.Fatal("v0.9.0 recipient fixture opened with a stranger identity")
+	}
+}
+
+// ---- v0.10.0 fixtures ------------------------------------------------------
+//
+// v010-passphrase.sindook, v010-recipient.sindook, and
+// v010-compressed.sindook were produced by the published v0.10.0 release
+// binary (verified against the release checksums.txt before use), with:
+//
+//	sindook seal -passfile pass.txt -o v010-passphrase.sindook plain.txt
+//	sindook seal -r id.key.pub -o v010-recipient.sindook plain.txt
+//	sindook seal -z -r id.key.pub -o v010-compressed.sindook plain.txt
+//
+// This is the release that shipped `scan`, verify baselines, and
+// concurrent verify -jobs; none of them changed the file format, and
+// this fixture chain is the proof for the next release.
+
+// v010Plaintext is the content sealed into the v0.10.0 fixtures.
+const v010Plaintext = "compatibility fixture: v0.10.0\nscan jobs and the key eras ahead\n"
+
+// v010Passphrase opens v010-passphrase.sindook. TEST-ONLY.
+const v010Passphrase = "fixture-passphrase-v010"
+
+// v010IdentityB64 is the base64 of the TEST-ONLY v0.10.0 identity file
+// that opens v010-recipient.sindook and v010-compressed.sindook. It lives
+// here because *.key files are gitignored by design.
+const v010IdentityB64 = `IyBzaW5kb29rIGlkZW50aXR5LCBjcmVhdGVkIDIwMjYtMDgtMjhUMTE6MDg6NTNaCiMgcHVibGlj
+OiBzaW5kb29rcGsxOjVqTjZmT1YrSXJNNDlDWUMrU2x2cnRRaTBZaXNISFhCMHZoeUVzZGVvSk1r
+UytJclZEcWtoZUdUeHF5MkN4QSswRHNnMHpabmxjQkttQXVJc3pURTcvb0lCT1JGaWRSQllUUlNN
+VUF0bnlaQlhyTkRjR2x4SWVGUXJabFRzK3hMa0NhNHdMbzI4YVlFKzRtQmI2bks4WGFqT3ZsWU9x
+Y0dpTEhCQ1dTcE9BbC9zdWtTaTJ2RnVTRTFtT2pPay9lWjdMYkZLd2N4c3RDbFgveVdyWUt3ZTdi
+STkybEJPa1VLTllsR1JrT2Q4Q1Y2bTFpUjRjY00yN0oxSWFCMUhRSmdybGxQb0lDaGFad2R0L2dV
+MHFTdWNqd2V0K3N1eDdVcjJFeHAwNHM0MWhwVWtIZXBnZWZQU2xObVpySUtRR0hPT2tnQWY0cUlT
+MG5Dc3dRbXJtZzJucXRYSzRSekEwVy9DZ1VaaE5rYWdrS1E0ZW9wNDNpR1ZpZWlmSngzQk1hQVNG
+cGk0T1pZMlNzcURnbktoV2dYckdZYTM5Wlh1RGlxM0NmRkNlcXZWNm1zM1JpdTc1TjZrU0laMlpW
+eS9lbVlkdVlpSndKZjgrR0ozZWRuaDZBWXZzbW8xcUFyc3JURi9SS1k1L0FFQXFoQ0cyZVcxZ1Nz
+WXZwZlJLWm5FMEVMNGlkQVZBeUNWeHhVK01yRUF5a0FZUE1lenhaN3JPYytsbXF1TitPVWxldG9E
+ckc5dUhvMTRXT1lLQU9sSG1GelUrT3lvbWRvT0RvSnByZW1kS0pmUHdxNVJmSkFLZFNMOXdobTNJ
+Q1daVUphNktwZVdhWjFoaWkzRURKV0RySmxma29rQWpSYzdYTWpHeEpXT2JCelYwc0J0eElmZFBJ
+OXhjbDNHdk44bzhHRmwzQy8wSE9ZdmdWVisvcFNjZ2llZWVpQTRHRVh3Zm1kM0pBbFhqc2ovK05t
+emxjL3pMdVdkQmlmSE1lWVU4R1BjMEFTaWZMR1RvbHFVU0poVzh4bWhvdVI5M3NmNDdNa1BadG1h
+bVd2MGhVbWFtT3Q0VExOSG9XN2ZDWldhRVdMNmFYR2VQZ0VIN3NkeUphcWdEaEN2N0lFYm9kbUx4
+REdGSmM2amZnV3dUbXdaTk5sV3VFWFJuaDU3eHN1RFBzTk5GR3lNZG1SSTl4SkRmUm9EQVFiZkF3
+TkVyU0x3cFVkSjdzNmdTSnNFNnFTZ01zcHEzR2g1QU9vSEV1NVhGV1hiMFpKQlJndWNMb3hnT05u
+VHdFOE5Ea2pNMU0zTjJOT2haS2hldWRGS0ptRXlxeXBTaEJCYVdLYUlLT3k0cVZ3N3ZnY1VaVng1
+SnBYd0VGdmcvYWRXc3l1TXdwS2FlVU82cEo4amRjcnora2ZZVXV3R2VKZ3hod0dReEJqYTN2TXVo
+WkYrY3QrczFZOVNSSXR2SnBHRFd1dEFEekRtREVKV25vVnRlWUxJZFZkV2hlTDViS0k3Z0ZjcW1P
+L3ZxSTdxb28vRXJ5aE9jYXJvcERQc0RTclpWSEp4YXRYU0tSeS9DeklHZWV4S3NZaEtlVk1tbUpi
+dkJCRE8veWtJOEUreUNKbkc0Q0t5cndab0RFV2tLaVU2amx5SkNZb2NZcG96d2s2aXdiSnZtTUY5
+eWwrMGFVSHFSaEwyZVJNQmpra2l3dEhEMEc0cmFPNis5bWNMS01HZlNXSDNaaWFReE9xNW5HdGRX
+bk5VU1ErVGdvalo5REdidlphNUp5UHA5UEExTWlSanJ5d09vSmE5VGxLdkVZMjMreUlVcnJEWjNn
+cUt2TmpXZ0p3NFpTbkhuQWJjTGF3dFZXbUhUdzRDTldJN0xDYjZrUTR0c1ptU3ZjYXNOb3FwYmNV
+NGhqRS9BSnhJR0piSVRoS1VTYktLNEEyK1N5WTBMTE5nUFJ3ZmFhTkIyd2FjNWMrUmhLL2xOd2ZB
+U21jNWZsVklyc2dSVWlIUW1wVC9Id0ROMUxOS0JITHhnWVkvSFVQdUZSSk1WaXR2RVdQVjhrQVZz
+RzRSeXlxV0RvY3h4QXU2MndVVnJsVWMybUVpVmJaNkZJaDhqTFN0UjBTZ28vUUZwS1g5c3dzZEhK
+K1BuM3hBT2ZVQjk2bW80TC9NVGxBbnVsY2NuRzVaNVloOXRUQ0l3CnNpbmRvb2tzazE6T0lWc296
+bXlCS3lwSG9kQ21OcHJvV2VJaTgwa01IOFdSY2JFR1hSWkhSWQo=`
+
+// v010IdentityKey materializes the embedded v0.10.0 identity.
+func v010IdentityKey(t *testing.T) *xwing.PrivateKey {
+	t.Helper()
+	return embeddedIdentityKey(t, v010IdentityB64, "v0.10.0")
+}
+
+// TestV010Fixtures proves current code opens every fixture produced by
+// the published v0.10.0 binary: plain, recipient, and compressed paths,
+// with negative cases so the fixtures cannot pass through a lenient path.
+func TestV010Fixtures(t *testing.T) {
+	id := v010IdentityKey(t)
+
+	t.Run("passphrase", func(t *testing.T) {
+		blob, err := os.ReadFile("testdata/v010-passphrase.sindook")
+		if err != nil {
+			t.Fatal(err)
+		}
+		out, err := openWith(t, blob, nil, []byte(v010Passphrase))
+		if err != nil {
+			t.Fatalf("v0.10.0 passphrase fixture: %v", err)
+		}
+		if !bytes.Equal(out, []byte(v010Plaintext)) {
+			t.Fatalf("v0.10.0 passphrase fixture plaintext = %q, want %q", out, v010Plaintext)
+		}
+	})
+
+	t.Run("recipient", func(t *testing.T) {
+		blob, err := os.ReadFile("testdata/v010-recipient.sindook")
+		if err != nil {
+			t.Fatal(err)
+		}
+		out, err := openWith(t, blob, id, nil)
+		if err != nil {
+			t.Fatalf("v0.10.0 recipient fixture: %v", err)
+		}
+		if !bytes.Equal(out, []byte(v010Plaintext)) {
+			t.Fatalf("v0.10.0 recipient fixture plaintext = %q, want %q", out, v010Plaintext)
+		}
+	})
+
+	t.Run("compressed", func(t *testing.T) {
+		blob, err := os.ReadFile("testdata/v010-compressed.sindook")
+		if err != nil {
+			t.Fatal(err)
+		}
+		gz, err := openWith(t, blob, id, nil)
+		if err != nil {
+			t.Fatalf("v0.10.0 compressed fixture: %v", err)
+		}
+		zr, err := gzip.NewReader(bytes.NewReader(gz))
+		if err != nil {
+			t.Fatalf("v0.10.0 compressed fixture is not gzip: %v", err)
+		}
+		out, err := io.ReadAll(zr)
+		if err != nil {
+			t.Fatalf("v0.10.0 compressed fixture gunzip: %v", err)
+		}
+		if !bytes.Equal(out, []byte(v010Plaintext)) {
+			t.Fatalf("v0.10.0 compressed fixture plaintext = %q, want %q", out, v010Plaintext)
+		}
+	})
+
+	// Negative cases: wrong credentials must still fail.
+	passBlob, err := os.ReadFile("testdata/v010-passphrase.sindook")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := openWith(t, passBlob, nil, []byte("wrong")); err == nil {
+		t.Fatal("v0.10.0 passphrase fixture opened with a wrong passphrase")
+	}
+	recBlob, err := os.ReadFile("testdata/v010-recipient.sindook")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := openWith(t, recBlob, newIdentity(t), nil); err == nil {
+		t.Fatal("v0.10.0 recipient fixture opened with a stranger identity")
 	}
 }
