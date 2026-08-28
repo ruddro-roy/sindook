@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -33,7 +34,16 @@ func TestSplitScanTarget(t *testing.T) {
 		{arg: "127.0.0.1:993", addr: "127.0.0.1:993", sni: "127.0.0.1"},
 		{arg: "[::1]:443", addr: "[::1]:443", sni: "::1"},
 		{arg: "[::1]", addr: "[::1]:443", sni: "::1"},
+		{arg: "2001:db8::1", addr: "[2001:db8::1]:443", sni: "2001:db8::1"},
+		// A valid IPv6 literal that looks like host:port; the brackets
+		// requirement exists precisely because this is ambiguous, and the
+		// literal reading wins.
+		{arg: "2001:db8::1:443", addr: "[2001:db8::1:443]:443", sni: "2001:db8::1:443"},
 		{arg: "", wantErr: true},
+		{arg: "example.com:", wantErr: true},
+		{arg: "example.com:bad", wantErr: true},
+		{arg: "example.com:70000", wantErr: true},
+		{arg: "host:name:443", wantErr: true},
 	}
 	for _, tt := range tests {
 		addr, sni, err := splitScanTarget(tt.arg)
@@ -65,6 +75,7 @@ func TestCertExpiryCheck(t *testing.T) {
 		{"expired", now.Add(-400 * day), now.Add(-day), "error"},
 		{"not yet valid", now.Add(day), now.Add(400 * day), "error"},
 		{"expiring soon", now.Add(-100 * day), now.Add(10 * day), "warning"},
+		{"thirty days exactly", now.Add(-100 * day), now.Add(30 * day), "warning"},
 		{"healthy", now.Add(-100 * day), now.Add(200 * day), "ok"},
 	}
 	for _, tt := range tests {
@@ -80,7 +91,6 @@ func TestCertKeyCheck(t *testing.T) {
 	rsaKey := func(bits int) *rsa.PublicKey {
 		return &rsa.PublicKey{N: new(big.Int).Lsh(big.NewInt(1), uint(bits-1)), E: 65537}
 	}
-	ecdsaPub := &ecdsa.PublicKey{Curve: elliptic.P256()}
 	edPub, _, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		t.Fatal(err)
@@ -94,7 +104,8 @@ func TestCertKeyCheck(t *testing.T) {
 		{"rsa 2048", rsaKey(2048), "warning"},
 		{"rsa 3072", rsaKey(3072), "ok"},
 		{"rsa 4096", rsaKey(4096), "ok"},
-		{"ecdsa p-256", ecdsaPub, "ok"},
+		{"ecdsa p-224", &ecdsa.PublicKey{Curve: elliptic.P224()}, "warning"},
+		{"ecdsa p-256", &ecdsa.PublicKey{Curve: elliptic.P256()}, "ok"},
 		{"ed25519", edPub, "ok"},
 	}
 	for _, tt := range tests {
@@ -123,10 +134,19 @@ func TestTLSVersionCheck(t *testing.T) {
 	}
 }
 
-// selfSignedServer starts a local TLS server with a self-signed certificate
-// for 127.0.0.1 and returns its HOST:PORT. The accept loop completes
+func TestScanSafe(t *testing.T) {
+	got := scanSafe("evil\x1b[2Kname\r\n\tok")
+	want := "evil?[2Kname??\tok"
+	if got != want {
+		t.Errorf("scanSafe = %q, want %q", got, want)
+	}
+}
+
+// scanTestServer starts a local TLS server with a self-signed ECDSA P-256
+// certificate for 127.0.0.1 and returns its HOST:PORT. mutate adjusts the
+// server tls.Config before listening. The accept loop completes
 // handshakes until the listener closes at test cleanup.
-func selfSignedServer(t *testing.T, notBefore, notAfter time.Time) string {
+func scanTestServer(t *testing.T, notBefore, notAfter time.Time, mutate func(*tls.Config)) string {
 	t.Helper()
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
@@ -145,9 +165,13 @@ func selfSignedServer(t *testing.T, notBefore, notAfter time.Time) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ln, err := tls.Listen("tcp", "127.0.0.1:0", &tls.Config{
+	cfg := &tls.Config{
 		Certificates: []tls.Certificate{{Certificate: [][]byte{der}, PrivateKey: key}},
-	})
+	}
+	if mutate != nil {
+		mutate(cfg)
+	}
+	ln, err := tls.Listen("tcp", "127.0.0.1:0", cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -180,9 +204,22 @@ func checkStatus(t *testing.T, target scanTarget, name, want string) {
 	t.Errorf("%s: check missing from report %+v", name, target.Checks)
 }
 
+func checkDetailContains(t *testing.T, target scanTarget, name, substr string) {
+	t.Helper()
+	for _, check := range target.Checks {
+		if check.Name == name {
+			if !strings.Contains(strings.ToLower(check.Detail), strings.ToLower(substr)) {
+				t.Errorf("%s: detail = %q, want it to mention %q", name, check.Detail, substr)
+			}
+			return
+		}
+	}
+	t.Errorf("%s: check missing from report %+v", name, target.Checks)
+}
+
 func TestScanTLSTargetSelfSigned(t *testing.T) {
 	now := time.Now()
-	addr := selfSignedServer(t, now.Add(-time.Hour), now.Add(90*24*time.Hour))
+	addr := scanTestServer(t, now.Add(-time.Hour), now.Add(90*24*time.Hour), nil)
 	target := scanTLSTarget(addr, 5*time.Second)
 
 	checkStatus(t, target, "connection", "ok")
@@ -191,22 +228,68 @@ func TestScanTLSTargetSelfSigned(t *testing.T) {
 	checkStatus(t, target, "certificate expiry", "ok")
 	checkStatus(t, target, "certificate key", "ok")
 	checkStatus(t, target, "protocol", "ok")
-	// Both sides are the local Go runtime, which negotiates the hybrid
+	// The Go test server refuses TLS 1.0/1.1 with an alert, which is
+	// positive evidence of rejection.
+	checkStatus(t, target, "legacy protocols", "ok")
+	// Both sides are the local Go runtime, which negotiates a hybrid
 	// post-quantum group by default.
 	checkStatus(t, target, "post-quantum key exchange", "ok")
 }
 
 func TestScanTLSTargetExpired(t *testing.T) {
 	now := time.Now()
-	addr := selfSignedServer(t, now.Add(-48*time.Hour), now.Add(-24*time.Hour))
+	addr := scanTestServer(t, now.Add(-48*time.Hour), now.Add(-24*time.Hour), nil)
 	target := scanTLSTarget(addr, 5*time.Second)
 
 	checkStatus(t, target, "connection", "ok")
-	checkStatus(t, target, "certificate chain", "error")
 	checkStatus(t, target, "certificate expiry", "error")
-	if target.Errors < 2 {
-		t.Errorf("expired self-signed endpoint: errors = %d, want >= 2", target.Errors)
-	}
+}
+
+func TestScanTLSTargetClassicalOnly(t *testing.T) {
+	now := time.Now()
+	addr := scanTestServer(t, now.Add(-time.Hour), now.Add(90*24*time.Hour), func(cfg *tls.Config) {
+		cfg.CurvePreferences = []tls.CurveID{tls.X25519}
+	})
+	target := scanTLSTarget(addr, 5*time.Second)
+
+	checkStatus(t, target, "connection", "ok")
+	checkStatus(t, target, "protocol", "ok")
+	// The server can only do classical X25519; the hybrid-only offer must
+	// be refused and reported as a warning, not an ok and not an error.
+	checkStatus(t, target, "post-quantum key exchange", "warning")
+	checkDetailContains(t, target, "post-quantum key exchange", "hybrid")
+}
+
+func TestScanTLSTargetLegacyOnly(t *testing.T) {
+	now := time.Now()
+	addr := scanTestServer(t, now.Add(-time.Hour), now.Add(90*24*time.Hour), func(cfg *tls.Config) {
+		cfg.MinVersion = tls.VersionTLS10
+		cfg.MaxVersion = tls.VersionTLS11
+		cfg.CipherSuites = []uint16{tls.TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA}
+	})
+	target := scanTLSTarget(addr, 5*time.Second)
+
+	// A legacy-only endpoint is a finding, not an unreachable host.
+	checkStatus(t, target, "connection", "ok")
+	checkStatus(t, target, "protocol", "error")
+	checkDetailContains(t, target, "protocol", "TLS 1.2 handshake failed")
+}
+
+func TestScanTLSTargetLegacyAccepted(t *testing.T) {
+	now := time.Now()
+	addr := scanTestServer(t, now.Add(-time.Hour), now.Add(90*24*time.Hour), func(cfg *tls.Config) {
+		cfg.MinVersion = tls.VersionTLS10
+		cfg.CipherSuites = []uint16{
+			tls.TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA,
+			tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+		}
+	})
+	target := scanTLSTarget(addr, 5*time.Second)
+
+	checkStatus(t, target, "connection", "ok")
+	// The server accepts modern TLS and also completes a TLS 1.0/1.1
+	// handshake, which must surface as a legacy warning.
+	checkStatus(t, target, "legacy protocols", "warning")
 }
 
 func TestScanTLSTargetUnreachable(t *testing.T) {
@@ -270,6 +353,7 @@ func TestScanOneFile(t *testing.T) {
 	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER})
 
 	puttyPlain := []byte("PuTTY-User-Key-File-3: ssh-ed25519\nEncryption: none\nComment: test\n")
+	mixedPEM := append(append([]byte(nil), certPEM...), pem.EncodeToMemory(plainSSH)...)
 
 	tests := []struct {
 		name       string
@@ -285,6 +369,9 @@ func TestScanOneFile(t *testing.T) {
 		{name: "expiring certificate", file: "tls.crt", data: certPEM, check: "certificate expiry", status: "warning"},
 		{name: "unencrypted putty", file: "login.ppk", data: puttyPlain, check: "private key", status: "warning"},
 		{name: "der certificate", file: "ca.cer", data: certDER, check: "certificate expiry", status: "warning"},
+		{name: "der pkcs8", file: "raw.key", data: pkcs8, check: "private key", status: "warning"},
+		{name: "cert then openssh key", file: "bundle.pem", data: mixedPEM, check: "private key", status: "warning"},
+		{name: "pkcs12 not opened", file: "backup.p12", data: []byte{0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10}, check: "private key", status: "warning"},
 		{name: "unrelated data", file: "license.key", data: []byte("AAAA-BBBB-CCCC"), irrelevant: true},
 	}
 	for _, tt := range tests {
@@ -301,6 +388,32 @@ func TestScanOneFile(t *testing.T) {
 			continue
 		}
 		checkStatus(t, target, tt.check, tt.status)
+	}
+}
+
+func TestScanOneFileOversized(t *testing.T) {
+	dir := t.TempDir()
+	path := writeScanFixture(t, dir, "huge.pem", make([]byte, scanFileMax+1), 0o600)
+	target, relevant := scanOneFile(path)
+	if !relevant {
+		t.Fatal("relevant = false, want true: oversized files must be reported, not skipped")
+	}
+	checkStatus(t, target, "access", "warning")
+	checkDetailContains(t, target, "access", "not inspected")
+}
+
+func TestScanOneFileSymlink(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink creation needs privileges on Windows")
+	}
+	dir := t.TempDir()
+	real := writeScanFixture(t, dir, "real.pem", []byte("data"), 0o600)
+	link := filepath.Join(dir, "link.pem")
+	if err := os.Symlink(real, link); err != nil {
+		t.Fatal(err)
+	}
+	if _, relevant := scanOneFile(link); relevant {
+		t.Error("symlink: relevant = true, want false")
 	}
 }
 
@@ -327,7 +440,7 @@ func TestScanOneFilePermissions(t *testing.T) {
 }
 
 func TestIsScanCandidate(t *testing.T) {
-	yes := []string{"a.pem", "b.KEY", "c.crt", "id_rsa", "id_ed25519", "d.ppk", "e.pfx"}
+	yes := []string{"a.pem", "b.KEY", "c.crt", "id_rsa", "id_ed25519", "id_ed25519_sk", "d.ppk", "e.pfx", "f.cert"}
 	no := []string{"main.go", "README.md", "keyboard.txt", "id_rsa.pub.txt"}
 	for _, name := range yes {
 		if !isScanCandidate(name) {

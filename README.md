@@ -196,12 +196,15 @@ capture.
 
 `scan tls` checks certificate expiry and key strength, chain and
 hostname validity, deprecated TLS 1.0/1.1 acceptance (RFC 8996), and
-whether the server offers the hybrid post-quantum key exchange
-X25519MLKEM768. Without it, recorded traffic stays readable by a future
-quantum computer. `scan files` finds private keys stored without a
-passphrase, key files other accounts can read, expired certificates,
-and weak key sizes. Findings come with remediations, and sealing the
-exposed file is one command away in the same binary.
+whether the server supports a hybrid post-quantum key exchange
+(X25519MLKEM768 or the SECP+ML-KEM groups). Recorded traffic from
+endpoints without one may be decryptable by a future quantum computer.
+Probes that cannot reach a conclusion say so instead of guessing.
+`scan files` finds private keys stored without a passphrase, key files
+with permissive file modes (best effort, platform dependent), expired
+certificates, and weak key sizes in commonly named key and certificate
+files. Findings come with remediations, and sealing the exposed file
+is one command away in the same binary.
 
 Scope is deliberate: scan answers the post-quantum readiness question.
 For an exhaustive cipher-suite audit, use a dedicated tool such as

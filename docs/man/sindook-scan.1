@@ -17,17 +17,23 @@ captures traffic.
 connects to each host (port 443 unless given) and reports certificate
 expiry, certificate key strength, chain and hostname validity, the
 negotiated protocol version, whether the server still accepts TLS 1.0
-or 1.1 (deprecated by RFC 8996), and whether the server supports the
-hybrid post-quantum key exchange X25519MLKEM768. A server without
-hybrid key exchange leaves recorded traffic readable by a future
-quantum computer, the harvest-now, decrypt-later problem.
+or 1.1 (deprecated by RFC 8996), and whether the server supports a
+hybrid post-quantum key exchange (X25519MLKEM768, SecP256r1MLKEM768,
+or SecP384r1MLKEM1024). Recorded traffic from a server without hybrid
+key exchange may be decryptable by a future quantum computer, the
+harvest-now, decrypt-later problem. A probe that cannot reach a
+conclusion (timeout, interference, or a restricted local runtime)
+reports itself as inconclusive instead of guessing. Ports that
+upgrade with STARTTLS (such as 25 and 587) are not supported; scan
+implicit-TLS ports.
 .PP
 .B scan files
 walks the given paths (default: the current directory) and reports
-private keys stored without a passphrase, key files readable by other
-accounts, expired or soon-expiring certificates, and weak key sizes.
-It recognizes PEM, OpenSSH, PuTTY, PKCS#8, PKCS#12, and DER
-certificate files.
+private keys stored without a passphrase, key files with permissive
+file modes (best effort, platform dependent), expired or soon-expiring
+certificates, and weak key sizes. Candidates are found by common file
+names. It recognizes PEM, OpenSSH, and PuTTY key files and DER
+certificates; PKCS#12 containers are reported but not opened.
 .PP
 Findings use the same shape as
 .BR sindook-doctor (1):
