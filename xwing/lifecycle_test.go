@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -115,10 +116,19 @@ func TestConcurrentWipeStress(t *testing.T) {
 	var (
 		wg sync.WaitGroup
 
-		wipeMu     sync.Mutex
-		wipeAt     []time.Time
+		// wipeCount increments after each Wipe returns. A decapsulator
+		// snapshots it BEFORE calling Decapsulate: because Wipe is sticky
+		// and Decapsulate holds the key mutex for its whole operation, a
+		// decapsulation can only succeed if zero wipes had returned when it
+		// began. Counting wipes instead of comparing time.Now() readings
+		// across goroutines keeps the linearization check exact — coarse
+		// clocks (0.5 ms granularity on Windows) make two calls in the same
+		// tick read equal, which a Before comparison then misreads as
+		// ordering.
+		wipeCount atomic.Int64
+
 		successMu  sync.Mutex
-		successAt  []time.Time
+		successAt  []int64
 		observMu   sync.Mutex
 		badSeeds   int
 		badPubs    int
@@ -135,7 +145,7 @@ func TestConcurrentWipeStress(t *testing.T) {
 					return
 				default:
 				}
-				started := time.Now()
+				started := wipeCount.Load()
 				got, err := k.Decapsulate(ct)
 				if err != nil {
 					continue
@@ -209,9 +219,7 @@ func TestConcurrentWipeStress(t *testing.T) {
 				default:
 				}
 				k.Wipe()
-				wipeMu.Lock()
-				wipeAt = append(wipeAt, time.Now())
-				wipeMu.Unlock()
+				wipeCount.Add(1)
 				// Yield so decapsulators and readers get a fair shot at the
 				// mutex instead of a tight wipe loop holding it by mutex
 				// handoff for the whole storm.
@@ -238,27 +246,19 @@ func TestConcurrentWipeStress(t *testing.T) {
 	if secrets != 0 {
 		t.Fatalf("%d successful decapsulations produced a wrong shared secret", secrets)
 	}
-	wipeMu.Lock()
-	wipes := append([]time.Time(nil), wipeAt...)
-	wipeMu.Unlock()
+	wipes := wipeCount.Load()
 	successMu.Lock()
-	successes := append([]time.Time(nil), successAt...)
+	successes := append([]int64(nil), successAt...)
 	successMu.Unlock()
-	if len(wipes) == 0 {
+	if wipes == 0 {
 		t.Fatal("no Wipe completed during the storm")
 	}
 	if len(successes) == 0 {
 		t.Fatal("no decapsulation succeeded during the storm; the success path was not exercised")
 	}
-	firstWipe := wipes[0]
-	for _, w := range wipes[1:] {
-		if w.Before(firstWipe) {
-			firstWipe = w
-		}
-	}
 	for _, s := range successes {
-		if !s.Before(firstWipe) {
-			t.Fatalf("decapsulation started at %v, after the first Wipe returned at %v, yet succeeded", s, firstWipe)
+		if s != 0 {
+			t.Fatalf("decapsulation began after %d wipe(s) had already returned, yet succeeded", s)
 		}
 	}
 
