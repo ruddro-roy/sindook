@@ -183,6 +183,30 @@ journaling, snapshots, or copies an attacker already made. `doctor
 -check-version` looks for a newer release. `selftest` runs the built-in
 X-Wing vectors plus a round trip and tamper check after a fresh install.
 
+## Audit your crypto posture
+
+`scan` reports which of your endpoints and key files rely on
+cryptography that is expiring, misconfigured, or quantum-vulnerable. It
+is read-only: no exploit payloads, no credential guessing, no traffic
+capture.
+
+    sindook scan tls example.com mail.example.com:993
+    sindook scan files ~/.ssh /etc/ssl/private
+    sindook scan tls -json api.example.com | jq '.errors'
+
+`scan tls` checks certificate expiry and key strength, chain and
+hostname validity, deprecated TLS 1.0/1.1 acceptance (RFC 8996), and
+whether the server offers the hybrid post-quantum key exchange
+X25519MLKEM768. Without it, recorded traffic stays readable by a future
+quantum computer. `scan files` finds private keys stored without a
+passphrase, key files other accounts can read, expired certificates,
+and weak key sizes. Findings come with remediations, and sealing the
+exposed file is one command away in the same binary.
+
+Scope is deliberate: scan answers the post-quantum readiness question.
+For an exhaustive cipher-suite audit, use a dedicated tool such as
+[testssl.sh](https://testssl.sh) alongside it.
+
 ## Exit codes
 
 | Code | Meaning |

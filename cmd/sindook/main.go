@@ -46,6 +46,7 @@ usage: sindook <command> [flags] [FILE...]
   inspect     show sealed-file metadata, no credentials needed
   rewrap      rotate recipients, passphrases, or the file key
   shred       overwrite and delete regular plaintext files
+  scan        audit TLS endpoints and local keys for weak crypto
   selftest    run a fast built-in cryptographic sanity check
   doctor      diagnose the local installation and configuration
   completion  print a bash, zsh, fish, or PowerShell completion script
@@ -70,6 +71,7 @@ var commands = map[string]struct {
 	"inspect":    {cmdInspect, usageInspect},
 	"rewrap":     {cmdRewrap, usageRewrap},
 	"shred":      {cmdShred, usageShred},
+	"scan":       {cmdScan, usageScan},
 	"selftest":   {cmdSelftest, usageSelftest},
 	"doctor":     {cmdDoctor, usageDoctor},
 	"completion": {cmdCompletion, usageCompletion},

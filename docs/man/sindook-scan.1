@@ -1,0 +1,76 @@
+.TH SINDOOK-SCAN 1 "2026-08-27" "sindook 0.9.0" "User Commands"
+.SH NAME
+sindook-scan \- audit TLS endpoints and local keys for weak cryptography
+.SH SYNOPSIS
+.B sindook scan tls
+[\fB\-json\fP] [\fB\-timeout\fP \fISECONDS\fP] \fIHOST\fP[:\fIPORT\fP]...
+.br
+.B sindook scan files
+[\fB\-json\fP] [\fIPATH\fP...]
+.SH DESCRIPTION
+Reports on the cryptographic posture of network endpoints and local
+files. Both modes are read-only: scan opens ordinary TLS connections or
+reads files, and never sends exploit payloads, guesses credentials, or
+captures traffic.
+.PP
+.B scan tls
+connects to each host (port 443 unless given) and reports certificate
+expiry, certificate key strength, chain and hostname validity, the
+negotiated protocol version, whether the server still accepts TLS 1.0
+or 1.1 (deprecated by RFC 8996), and whether the server supports the
+hybrid post-quantum key exchange X25519MLKEM768. A server without
+hybrid key exchange leaves recorded traffic readable by a future
+quantum computer, the harvest-now, decrypt-later problem.
+.PP
+.B scan files
+walks the given paths (default: the current directory) and reports
+private keys stored without a passphrase, key files readable by other
+accounts, expired or soon-expiring certificates, and weak key sizes.
+It recognizes PEM, OpenSSH, PuTTY, PKCS#8, PKCS#12, and DER
+certificate files.
+.PP
+Findings use the same shape as
+.BR sindook-doctor (1):
+a status (ok, warning, or error), a detail, and a remediation. The
+exit code is 0 when nothing is an error, 1 otherwise, so the command
+works in cron jobs and CI.
+.SH OPTIONS
+.TP
+.B \-json
+Print one machine-readable JSON report to stdout instead of text.
+.TP
+.B \-timeout \fISECONDS\fP
+Per-connection timeout for tls scans. Default 10.
+.SH SCOPE
+scan answers one question: which of my endpoints and key files rely on
+cryptography that is expiring, misconfigured, or quantum-vulnerable.
+For an exhaustive cipher-suite and TLS-implementation audit, use a
+dedicated tool such as testssl.sh alongside it.
+.SH EXAMPLES
+Audit two endpoints, one on a non-default port:
+.PP
+.nf
+.RS
+sindook scan tls example.com mail.example.com:993
+.RE
+.fi
+.PP
+Audit SSH and TLS key material on a server:
+.PP
+.nf
+.RS
+sindook scan files ~/.ssh /etc/ssl/private
+.RE
+.fi
+.PP
+Fail a CI job when an endpoint has an expired certificate:
+.PP
+.nf
+.RS
+sindook scan tls -json api.example.com | jq '.errors'
+.RE
+.fi
+.SH SEE ALSO
+.BR sindook (1),
+.BR sindook-doctor (1),
+.BR sindook-seal (1)
