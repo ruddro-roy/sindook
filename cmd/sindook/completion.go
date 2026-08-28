@@ -44,7 +44,7 @@ const bashCompletion = `_sindook() {
             pubkey)  opts="-identity-passfile" ;;
             seal)    opts="-r -R -p -passfile -glob -a -z -o -f" ;;
             open)    opts="-i -p -passfile -identity-passfile -glob -o -f -z -max-decompressed" ;;
-            verify)  opts="-i -p -passfile -identity-passfile -glob -json -z -max-decompressed -save -baseline" ;;
+            verify)  opts="-i -p -passfile -identity-passfile -glob -jobs -json -z -max-decompressed -save -baseline" ;;
             inspect) opts="-json -glob" ;;
             paths)   opts="-json" ;;
 			doctor)  opts="-json -check-version" ;;
@@ -165,7 +165,7 @@ Register-ArgumentCompleter -Native -CommandName sindook -ScriptBlock {
         'pubkey' { @('-identity-passfile') }
         'seal' { @('-r', '-R', '-p', '-passfile', '-glob', '-a', '-z', '-o', '-f') }
         'open' { @('-i', '-p', '-passfile', '-identity-passfile', '-glob', '-o', '-f', '-z', '-max-decompressed') }
-        'verify' { @('-i', '-p', '-passfile', '-identity-passfile', '-glob', '-json', '-z', '-max-decompressed', '-save', '-baseline') }
+        'verify' { @('-i', '-p', '-passfile', '-identity-passfile', '-glob', '-jobs', '-json', '-z', '-max-decompressed', '-save', '-baseline') }
         'inspect' { @('-json', '-glob') }
         'paths' { @('-json') }
         'scan' { @('tls', 'files', '-json', '-timeout') }

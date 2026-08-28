@@ -10,7 +10,9 @@ import (
 	"hash"
 	"io"
 	"os"
+	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/ruddro-roy/sindook/box"
@@ -139,7 +141,7 @@ func openOne(inPath, outPath string, id *xwing.PrivateKey, pass []byte, force, d
 
 const usageVerify = `usage: sindook verify [-i IDENTITY | -p | -passfile FILE]
                       [-identity-passfile FILE] [-z] [-max-decompressed SIZE]
-                      [-glob PATTERN]... [-json]
+                      [-glob PATTERN]... [-json] [-jobs N]
                       [-save BASELINE | -baseline BASELINE] [FILE...]
 
 Fully decrypt and authenticate sealed files without writing plaintext
@@ -169,6 +171,9 @@ flags:
                   cap the decompressed size with -z; accepts 2G, 512MiB,
                   or a byte count, 0 means unlimited (default 1T)
   -glob PATTERN    add files matched by a portable filesystem pattern
+  -jobs N         verify up to N files concurrently (default: up to 4
+                  for multiple files, 1 for a single file or stdin;
+                  per-file progress is shown only in single-job runs)
   -json            print one machine-readable JSON array with per-file
                   status instead of human-readable ok/FAILED lines
   -save BASELINE   write a JSON baseline of verified files
@@ -186,6 +191,13 @@ type verifyResult struct {
 	SHA256         string `json:"sha256,omitempty"`
 	Size           *int64 `json:"size,omitempty"`
 	BaselineSHA256 string `json:"baseline_sha256,omitempty"`
+}
+
+// verifyOutcome pairs a per-file report with the error that decides the
+// exit code; failErr is nil unless decryption itself failed.
+type verifyOutcome struct {
+	res     verifyResult
+	failErr error
 }
 
 const baselineVersion = 1
@@ -247,6 +259,7 @@ func cmdVerify(args []string) error {
 	decompress := fs.Bool("z", false, "")
 	maxDecompressed := fs.String("max-decompressed", "1T", "")
 	jsonOut := fs.Bool("json", false, "")
+	jobs := fs.Int("jobs", 0, "")
 	savePath := fs.String("save", "", "")
 	baselinePath := fs.String("baseline", "", "")
 	var globs multiFlag
@@ -255,6 +268,9 @@ func cmdVerify(args []string) error {
 
 	if *savePath != "" && *baselinePath != "" {
 		return usagef("-save and -baseline cannot be combined")
+	}
+	if *jobs < 0 {
+		return usagef("-jobs cannot be negative")
 	}
 	wantHash := *savePath != "" || *baselinePath != ""
 
@@ -297,55 +313,67 @@ func cmdVerify(args []string) error {
 	if len(inputs) == 0 {
 		inputs = []string{"-"}
 	}
-	var errs []error
-	results := make([]verifyResult, 0, len(inputs))
-	checked := make(map[string]bool, len(inputs))
-	for _, inPath := range inputs {
-		name, sum, size, err := verifyOne(inPath, id, pass, *decompress, limit, wantHash)
-		res := verifyResult{File: name}
-		if wantHash {
-			res.SHA256 = sum
-			if size >= 0 {
-				res.Size = &size
+
+	workers := *jobs
+	if workers > len(inputs) {
+		workers = len(inputs)
+	}
+	if workers == 0 {
+		workers = runtime.NumCPU()
+		if workers > 4 {
+			workers = 4
+		}
+	}
+	if workers > 1 {
+		for _, in := range inputs {
+			if in == "-" {
+				workers = 1 // one stdin stream cannot be read concurrently
+				break
 			}
 		}
-		if err != nil {
-			res.Status = "failed"
-			res.Error = err.Error()
-			res.BaselineSHA256 = baselineIndex[name].SHA256
-			// A baseline entry absent from disk is drift, not a decryption
-			// failure: report it as missing without changing the exit code.
-			if baselineIndex != nil && errors.Is(err, os.ErrNotExist) {
-				if _, inBase := baselineIndex[name]; inBase {
-					res.Status = "missing"
-					res.Error = "in baseline but not found on disk"
-					res.SHA256 = ""
-					res.Size = nil
+		if len(inputs) < 2 {
+			workers = 1
+		}
+	}
+	// The per-file progress meter redraws one stderr line; only a single
+	// worker may draw it.
+	progress := workers == 1
+
+	outcomes := make([]verifyOutcome, len(inputs))
+	if workers <= 1 {
+		for i, inPath := range inputs {
+			outcomes[i] = classifyOne(inPath, id, pass, *decompress, limit, wantHash, baselineIndex, progress)
+		}
+	} else {
+		tasks := make(chan int)
+		var wg sync.WaitGroup
+		for w := 0; w < workers; w++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				for i := range tasks {
+					outcomes[i] = classifyOne(inputs[i], id, pass, *decompress, limit, wantHash, baselineIndex, false)
 				}
-			}
-			if res.Status == "failed" {
-				errs = append(errs, fmt.Errorf("%s: %w", name, err))
-			}
-			results = append(results, res)
-			checked[name] = true
-			continue
+			}()
+		}
+		for i := range inputs {
+			tasks <- i
+		}
+		close(tasks)
+		wg.Wait()
+	}
+
+	var errs []error
+	checked := make(map[string]bool, len(inputs))
+	results := make([]verifyResult, 0, len(inputs))
+	for _, o := range outcomes {
+		if o.failErr != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", o.res.File, o.failErr))
 		}
 		if baselineIndex != nil {
-			checked[name] = true
-			if entry, ok := baselineIndex[name]; !ok {
-				res.Status = "new"
-			} else {
-				res.BaselineSHA256 = entry.SHA256
-				if entry.SHA256 == sum {
-					res.Status = "ok"
-				} else {
-					res.Status = "changed"
-				}
-			}
-		} else {
-			res.Status = "ok"
+			checked[o.res.File] = true
 		}
-		results = append(results, res)
+		results = append(results, o.res)
 	}
 	if baselineIndex != nil {
 		for _, e := range baseline.Entries {
@@ -410,7 +438,55 @@ func cmdVerify(args []string) error {
 	return errors.Join(errs...)
 }
 
-func verifyOne(inPath string, id *xwing.PrivateKey, pass []byte, decompress bool, maxDecompressed int64, withHash bool) (string, string, int64, error) {
+// classifyOne verifies one file and classifies the result against the
+// baseline index (nil when not comparing). progress enables the per-file
+// stderr meter; it is only safe from a single worker.
+func classifyOne(inPath string, id *xwing.PrivateKey, pass []byte, decompress bool, maxDecompressed int64, wantHash bool, baselineIndex map[string]baselineEntry, progress bool) verifyOutcome {
+	name, sum, size, err := verifyOne(inPath, id, pass, decompress, maxDecompressed, wantHash, progress)
+	out := verifyOutcome{res: verifyResult{File: name}}
+	if wantHash {
+		out.res.SHA256 = sum
+		if size >= 0 {
+			out.res.Size = &size
+		}
+	}
+	if err != nil {
+		out.res.Status = "failed"
+		out.res.Error = err.Error()
+		out.res.BaselineSHA256 = baselineIndex[name].SHA256
+		// A baseline entry absent from disk is drift, not a decryption
+		// failure: report it as missing without changing the exit code.
+		if baselineIndex != nil && errors.Is(err, os.ErrNotExist) {
+			if _, inBase := baselineIndex[name]; inBase {
+				out.res.Status = "missing"
+				out.res.Error = "in baseline but not found on disk"
+				out.res.SHA256 = ""
+				out.res.Size = nil
+			}
+		}
+		if out.res.Status == "failed" {
+			out.failErr = err
+		}
+		return out
+	}
+	if baselineIndex != nil {
+		if entry, ok := baselineIndex[name]; !ok {
+			out.res.Status = "new"
+		} else {
+			out.res.BaselineSHA256 = entry.SHA256
+			if entry.SHA256 == sum {
+				out.res.Status = "ok"
+			} else {
+				out.res.Status = "changed"
+			}
+		}
+	} else {
+		out.res.Status = "ok"
+	}
+	return out
+}
+
+func verifyOne(inPath string, id *xwing.PrivateKey, pass []byte, decompress bool, maxDecompressed int64, withHash bool, progress bool) (string, string, int64, error) {
 	name := inPath
 	if name == "" || name == "-" {
 		name = "stdin"
@@ -420,7 +496,11 @@ func verifyOne(inPath string, id *xwing.PrivateKey, pass []byte, decompress bool
 		return name, "", -1, err
 	}
 	defer in.Close()
-	src, _, err := detectArmor(withProgress(in, size, "verify "+name))
+	var src io.Reader = in
+	if progress {
+		src = withProgress(in, size, "verify "+name)
+	}
+	src, _, err = detectArmor(src)
 	if err != nil {
 		return name, "", -1, err
 	}

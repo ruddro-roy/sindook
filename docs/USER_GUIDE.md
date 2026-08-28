@@ -252,6 +252,15 @@ alert on authentication failures while logging drift. In `-json` output
 each entry carries `status`, the actual `sha256`, and the
 `baseline_sha256` for comparison.
 
+Large sets verify faster with `-jobs N`, which checks up to N files
+concurrently (`-jobs 4` is the effective default for multiple files;
+single files and stdin use one worker). Results always print in operand
+order regardless of which file finishes first:
+
+```sh
+sindook verify -i personal.key -jobs 4 backups/*.sindook
+```
+
 ## Inspect without credentials
 
 ```sh

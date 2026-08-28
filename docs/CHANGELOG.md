@@ -19,6 +19,11 @@ clear entry here, as described in [docs/COMPATIBILITY.md](COMPATIBILITY.md).
   output gains optional `sha256`, `size`, and `baseline_sha256` fields,
   and the baseline format follows the same additive, versioned policy as
   the config file (docs/COMPATIBILITY.md).
+- Concurrent verification. `sindook verify -jobs N` checks up to N files
+  at once; the default is up to 4 workers for multiple files and a single
+  worker for one file or stdin. Results, `-json` output, `-save`
+  baselines, and the exit code are identical to a serial run; the
+  per-file progress meter appears only in single-job runs.
 
 ## [v0.9.0] - 2026-08-27
 
