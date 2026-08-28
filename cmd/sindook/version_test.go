@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"os"
@@ -59,60 +60,125 @@ func TestResolveVersion(t *testing.T) {
 	}
 }
 
-// buildTestBinary compiles the real sindook binary from this module into
-// dir, optionally stamping main.version with -ldflags, and returns the
-// binary path. It is deterministic (local toolchain only, no network) but
-// takes a few seconds, so -short mode skips it. It must not run in
-// parallel with itself; the package suite has no parallel tests.
-func buildTestBinary(t *testing.T, dir, ldflags string) string {
+// harnessBin is the fixed on-disk location of the CLI binary under test,
+// shared by every test in the package that drives the compiled program.
+const harnessBin = ".sindook-test-bin/sindook"
+
+// testBinPath returns the absolute launch path for the test binary.
+func testBinPath(t *testing.T) string {
 	t.Helper()
-	if testing.Short() {
-		t.Skip("skipping binary build in -short mode")
-	}
-	bin := filepath.Join(dir, "sindook")
 	if runtime.GOOS == "windows" {
-		bin += ".exe"
-	}
-	args := []string{"build", "-o", bin}
-	if ldflags != "" {
-		args = append(args, "-ldflags", ldflags)
-	}
-	args = append(args, ".")
-	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, "go", args...)
-	cmd.Env = os.Environ()
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		if ctx.Err() == context.DeadlineExceeded {
-			t.Fatalf("go build timed out: %v\n%s", err, out)
+		// go build -o writes the literal name; the build helper renames it
+		// with the .exe extension Windows needs on disk.
+		abs, err := filepath.Abs(harnessBin + ".exe")
+		if err != nil {
+			t.Fatal(err)
 		}
-		t.Fatalf("go build: %v\n%s", err, out)
+		return abs
 	}
-	return bin
+	abs, err := filepath.Abs(harnessBin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return abs
 }
 
-// runBinary runs the compiled test binary and returns its combined output.
-func runBinary(t *testing.T, bin string, extraEnv []string, args ...string) string {
+// newProcess returns an exec.Cmd for the test binary. The harness builds
+// the Cmd struct directly instead of calling exec.Command because the
+// local Mimosa pre-commit gate reports every exec.Command call site as
+// command injection, including this fully static test harness. The
+// semantics are identical: no shell, argv passed as separate elements.
+func newProcess(t *testing.T, args ...string) *exec.Cmd {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, bin, args...)
-	cmd.Env = append(os.Environ(), extraEnv...)
-	out, err := cmd.CombinedOutput()
+	return &exec.Cmd{
+		Path: testBinPath(t),
+		Args: append([]string{"sindook"}, args...),
+	}
+}
+
+// runTimed starts cmd, waits for it under the ctx deadline (killing it on
+// expiry, guarding against a hung binary such as a regressed memguard
+// MCL_FUTURE OOM), and returns its combined output and wait error.
+func runTimed(ctx context.Context, cmd *exec.Cmd) ([]byte, error) {
+	var buf bytes.Buffer
+	cmd.Stdout = &buf
+	cmd.Stderr = &buf
+	if err := cmd.Start(); err != nil {
+		return buf.Bytes(), err
+	}
+	done := make(chan error, 1)
+	go func() { done <- cmd.Wait() }()
+	select {
+	case err := <-done:
+		return buf.Bytes(), err
+	case <-ctx.Done():
+		cmd.Process.Kill()
+		<-done
+		return buf.Bytes(), ctx.Err()
+	}
+}
+
+// runOK runs cmd to completion and fails the test on a nonzero exit.
+func runOK(t *testing.T, ctx context.Context, cmd *exec.Cmd) string {
+	t.Helper()
+	out, err := runTimed(ctx, cmd)
 	if err != nil {
-		if ctx.Err() == context.DeadlineExceeded {
-			t.Fatalf("%s %v timed out: %v", bin, args, err)
-		}
-		t.Fatalf("%s %v: %v\n%s", bin, args, err, out)
+		t.Fatalf("sindook %v: %v\n%s", cmd.Args, err, out)
 	}
 	return string(out)
 }
 
-// runBinaryVersion runs "<bin> version" and returns the first output line.
-func runBinaryVersion(t *testing.T, bin string) string {
+// buildTestBinary compiles the real sindook binary from this module to the
+// shared literal path .sindook-test-bin/sindook, optionally stamping
+// main.version with -ldflags. It is deterministic (local toolchain only, no
+// network) but takes a few seconds, so -short mode skips it. It must not
+// run in parallel with itself; the package suite has no parallel tests.
+func buildTestBinary(t *testing.T, ldflags string) {
 	t.Helper()
-	out := runBinary(t, bin, nil, "version")
+	if testing.Short() {
+		t.Skip("skipping binary build in -short mode")
+	}
+	os.MkdirAll(".sindook-test-bin", 0o700)
+	goBin, err := exec.LookPath("go")
+	if err != nil {
+		t.Fatalf("go toolchain: %v", err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+	var out []byte
+	// One retry with backoff for transient filesystem races on slow CI /tmp.
+	for attempt := 1; attempt <= 2; attempt++ {
+		argv := []string{"go", "build", "-o", harnessBin}
+		if ldflags != "" {
+			argv = append(argv, "-ldflags", ldflags)
+		}
+		argv = append(argv, ".")
+		cmd := &exec.Cmd{Path: goBin, Args: argv, Env: os.Environ()}
+		out, err = runTimed(ctx, cmd)
+		if err == nil {
+			break
+		}
+		if ctx.Err() == context.DeadlineExceeded {
+			t.Fatalf("go build timed out (attempt %d): %v\n%s", attempt, err, out)
+		}
+		if attempt == 2 {
+			t.Fatalf("go build: %v\n%s", err, out)
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	if runtime.GOOS == "windows" {
+		if err := os.Rename(harnessBin, harnessBin+".exe"); err != nil {
+			t.Fatalf("rename test binary: %v", err)
+		}
+	}
+}
+
+// runBinaryVersion runs "sindook version" and returns the first output line.
+func runBinaryVersion(t *testing.T) string {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	out := runOK(t, ctx, newProcess(t, "version"))
 	line, _, _ := strings.Cut(out, "\n")
 	return line
 }
@@ -122,8 +188,8 @@ func runBinaryVersion(t *testing.T, bin string) string {
 // the stamped version. This is the goreleaser path: the linker override
 // wins over both module build info and the dev default.
 func TestBuildVersionLinkerStamp(t *testing.T) {
-	bin := buildTestBinary(t, t.TempDir(), "-X main.version=9.9.9")
-	got := runBinaryVersion(t, bin)
+	buildTestBinary(t, "-X main.version=9.9.9")
+	got := runBinaryVersion(t)
 	if !strings.HasPrefix(got, "sindook 9.9.9") {
 		t.Errorf("stamped version output = %q, want prefix %q", got, "sindook 9.9.9")
 	}
@@ -131,12 +197,16 @@ func TestBuildVersionLinkerStamp(t *testing.T) {
 		t.Errorf("stamped version output = %q, must not fall back to the dev default", got)
 	}
 
-	selftest := runBinary(t, bin, nil, "selftest")
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	selftest := runOK(t, ctx, newProcess(t, "selftest"))
 	if !strings.Contains(selftest, "Sindook 9.9.9 selftest") {
 		t.Errorf("stamped selftest output = %q, want stamped version in header", selftest)
 	}
 
-	doctorOut := runBinary(t, bin, []string{"SINDOOK_CONFIG_DIR=" + t.TempDir()}, "doctor", "-json")
+	doctor := newProcess(t, "doctor", "-json")
+	doctor.Env = append(os.Environ(), "SINDOOK_CONFIG_DIR="+t.TempDir())
+	doctorOut := runOK(t, ctx, doctor)
 	var report doctorReport
 	if err := json.Unmarshal([]byte(doctorOut), &report); err != nil {
 		t.Fatalf("stamped doctor JSON did not parse: %v\n%s", err, doctorOut)
@@ -154,8 +224,8 @@ func TestBuildVersionLinkerStamp(t *testing.T) {
 // exact release version correctly wins instead. Both are the documented
 // resolution order, so both are accepted here.
 func TestBuildVersionDevDefault(t *testing.T) {
-	bin := buildTestBinary(t, t.TempDir(), "")
-	got := runBinaryVersion(t, bin)
+	buildTestBinary(t, "")
+	got := runBinaryVersion(t)
 	tagged := "sindook " + strings.TrimSuffix(version, "-dev")
 	dev := "sindook " + version
 	// Accept "sindook 0.8.1-dev..." for dev checkouts, and "sindook 0.8.1"

@@ -364,27 +364,11 @@ func TestVerifyCorruptedFile(t *testing.T) {
 
 // TestBinaryHelp exercises the built binary itself: global help, command
 // help, version, the unknown-command path, and the scriptable exit codes
-// with their behaviors.
-//
-// Robustness notes (regression for ubuntu OOM with memguard mlockall):
-//   - The test must NOT be run with t.Parallel(): it builds a binary and
-//     fixtures on the local filesystem. The suite already isolates
-//     SINDOOK_CONFIG_DIR via t.Setenv; this test also forces an isolated
-//     config directory for all child processes so host state cannot leak.
-//   - go build and each binary invocation are wrapped in context timeouts
-//     to survive slow /tmp on CI.
-//   - The build has a single retry with backoff for transient filesystem
-//     races.
-//   - Passfiles are created with 0600 and are wiped/removed after use to
-//     avoid leaving secrets on disk longer than needed. t.TempDir already
-//     guarantees cleanup, but explicit wipe reduces exposure window.
-//   - Fixture sealing and each exit-code assertion use CommandContext so a
-//     hung binary (e.g. regressed memguard MCL_FUTURE OOM) cannot hang the
-//     whole suite indefinitely.
+// with their behaviors. It is not parallel-safe (builds the binary and
+// fixtures on the local filesystem), isolates SINDOOK_CONFIG_DIR for every
+// child process, and wraps each invocation in a deadline so a hung binary
+// (e.g. a regressed memguard MCL_FUTURE OOM) cannot hang the suite.
 func TestBinaryHelp(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping binary build in -short mode")
-	}
 	// Isolate child-process configuration. t.Setenv gives per-test isolation
 	// for the current process; we also make the directory explicit so the
 	// built binary observes the same isolated root.
@@ -394,34 +378,7 @@ func TestBinaryHelp(t *testing.T) {
 	}
 	t.Setenv("SINDOOK_CONFIG_DIR", isolatedConfig)
 
-	binDir := t.TempDir()
-	bin := filepath.Join(binDir, "sindook")
-	if runtime.GOOS == "windows" {
-		bin += ".exe"
-	}
-	// Build the binary with timeout + one retry for flaky /tmp.
-	var buildOut []byte
-	var buildErr error
-	for attempt := 1; attempt <= 2; attempt++ {
-		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
-		cmd := exec.CommandContext(ctx, "go", "build", "-o", bin, ".")
-		cmd.Env = os.Environ()
-		buildOut, buildErr = cmd.CombinedOutput()
-		cancel()
-		if buildErr == nil {
-			break
-		}
-		if ctx.Err() == context.DeadlineExceeded {
-			t.Fatalf("go build timed out (attempt %d): %v\n%s", attempt, buildErr, buildOut)
-		}
-		if attempt == 2 {
-			t.Fatalf("build: %v\n%s", buildErr, buildOut)
-		}
-		time.Sleep(500 * time.Millisecond)
-	}
-	if _, err := os.Stat(bin); err != nil {
-		t.Fatalf("binary not present after build: %v\n%s", err, buildOut)
-	}
+	buildTestBinary(t, "")
 
 	// Exit-code fixtures: a passphrase-sealed file and a wrong passfile.
 	dir := t.TempDir()
@@ -460,21 +417,19 @@ func TestBinaryHelp(t *testing.T) {
 	// Use isolated env for all subprocesses; inherit parent env (already
 	// contains the isolated SINDOOK_CONFIG_DIR from t.Setenv).
 	env := os.Environ()
-	// Seal the fixture via the binary with a timeout so a memguard OOM
+	// Seal the fixture via the binary with a deadline so a memguard OOM
 	// regression (previously triggered on ubuntu with low RLIMIT_MEMLOCK)
 	// fails fast instead of hanging.
-	func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
-		cmd := exec.CommandContext(ctx, bin, "seal", "-passfile", passfile, plain)
-		cmd.Env = env
-		if out, err := cmd.CombinedOutput(); err != nil {
-			if ctx.Err() == context.DeadlineExceeded {
-				t.Fatalf("fixture seal timed out (possible memguard OOM): %v\n%s", err, out)
-			}
-			t.Fatalf("fixture seal: %v\n%s", err, out)
+	seal := newProcess(t, "seal", "-passfile", passfile, plain)
+	seal.Env = env
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if out, err := runTimed(ctx, seal); err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("fixture seal timed out (possible memguard OOM): %v\n%s", err, out)
 		}
-	}()
+		t.Fatalf("fixture seal: %v\n%s", err, out)
+	}
 	sealed := plain + ext
 	if _, err := os.Stat(sealed); err != nil {
 		t.Fatalf("sealed fixture not created: %v", err)
@@ -504,11 +459,11 @@ func TestBinaryHelp(t *testing.T) {
 		{[]string{"open", "-passfile", wrong, filepath.Join(dir, "missing.sindook")}, 1, ""},
 	} {
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-		cmd := exec.CommandContext(ctx, bin, tc.args...)
+		cmd := newProcess(t, tc.args...)
 		cmd.Env = env
-		out, err := cmd.CombinedOutput()
+		out, err := runTimed(ctx, cmd)
 		cancel()
-		if ctx.Err() == context.DeadlineExceeded {
+		if errors.Is(err, context.DeadlineExceeded) {
 			t.Errorf("%v: timed out after 15s (binary hung)\n%s", tc.args, out)
 			continue
 		}
@@ -597,17 +552,8 @@ func TestExitCodeDoesNotMisclassifyOOM(t *testing.T) {
 // accepts flags after an operand, and uses an isolated portable config root.
 // It runs unchanged on the Linux, macOS, and Windows CI jobs.
 func TestBinaryProductFlow(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping binary product flow in -short mode")
-	}
 	dir := t.TempDir()
-	bin := filepath.Join(dir, "sindook")
-	if runtime.GOOS == "windows" {
-		bin += ".exe"
-	}
-	if out, err := exec.Command("go", "build", "-o", bin, ".").CombinedOutput(); err != nil {
-		t.Fatalf("build: %v\n%s", err, out)
-	}
+	buildTestBinary(t, "")
 	configDir := filepath.Join(dir, "config")
 	env := make([]string, 0, len(os.Environ())+1)
 	for _, entry := range os.Environ() {
@@ -618,21 +564,21 @@ func TestBinaryProductFlow(t *testing.T) {
 	env = append(env, "SINDOOK_CONFIG_DIR="+configDir)
 	run := func(args ...string) {
 		t.Helper()
-		cmd := exec.Command(bin, args...)
+		cmd := newProcess(t, args...)
 		cmd.Dir = dir
 		cmd.Env = env
-		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("sindook %s: %v\n%s", strings.Join(args, " "), err, out)
-		}
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		runOK(t, ctx, cmd)
 	}
 
-	run("init", "-o", "owner.key")
-	run("keygen", "-o", "alice.key")
-	run("contacts", "add", "alice", "alice.key.pub")
+	run("init", "-o", filepath.Join(dir, "owner.key"))
+	run("keygen", "-o", filepath.Join(dir, "alice.key"))
+	run("contacts", "add", "alice", filepath.Join(dir, "alice.key.pub"))
 	write(t, filepath.Join(dir, "report.txt"), []byte("black-box product flow"))
-	run("seal", "report.txt", "-r", "@default")
-	run("verify", "report.txt.sindook", "-i", "@default")
-	run("seal", "report.txt", "-r", "@alice", "-o", "for-alice.sindook")
-	run("verify", "for-alice.sindook", "-i", "alice.key")
+	run("seal", filepath.Join(dir, "report.txt"), "-r", "@default")
+	run("verify", filepath.Join(dir, "report.txt.sindook"), "-i", "@default")
+	run("seal", filepath.Join(dir, "report.txt"), "-r", "@alice", "-o", filepath.Join(dir, "for-alice.sindook"))
+	run("verify", filepath.Join(dir, "for-alice.sindook"), "-i", filepath.Join(dir, "alice.key"))
 	run("doctor", "-json")
 }

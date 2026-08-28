@@ -10,9 +10,11 @@ import (
 
 // isolateConfig points SINDOOK_CONFIG_DIR at a fresh directory so tests
 // never read or write the developer's real contacts and groups.
-func isolateConfig(t *testing.T) {
+func isolateConfig(t *testing.T) string {
 	t.Helper()
-	t.Setenv("SINDOOK_CONFIG_DIR", filepath.Join(t.TempDir(), "config"))
+	dir := filepath.Join(t.TempDir(), "config")
+	t.Setenv("SINDOOK_CONFIG_DIR", dir)
+	return dir
 }
 
 func addContactIdentity(t *testing.T, dir, name string) string {
@@ -192,7 +194,7 @@ func TestGroupDeduplicatesKeys(t *testing.T) {
 }
 
 func TestGroupUnknownMemberFailsClosed(t *testing.T) {
-	isolateConfig(t)
+	cfgDir := isolateConfig(t)
 	dir := t.TempDir()
 	_, pub := newIdentity(t, dir, "id.key")
 	mustRun(t, cmdContacts, "add", "alice", pub)
@@ -203,7 +205,7 @@ func TestGroupUnknownMemberFailsClosed(t *testing.T) {
 		t.Fatalf("group add with unknown member: %v", err)
 	}
 
-	cfgPath := os.Getenv("SINDOOK_CONFIG_DIR") + "/config.json"
+	cfgPath := filepath.Join(cfgDir, "config.json")
 	raw, err := os.ReadFile(cfgPath)
 	if err != nil {
 		t.Fatal(err)
@@ -221,12 +223,12 @@ func TestGroupUnknownMemberFailsClosed(t *testing.T) {
 }
 
 func TestGroupConfigWithoutGroupsKey(t *testing.T) {
-	isolateConfig(t)
+	cfgDir := isolateConfig(t)
 	dir := t.TempDir()
 	_, pub := newIdentity(t, dir, "id.key")
 	mustRun(t, cmdContacts, "add", "alice", pub)
 
-	cfgPath := filepath.Join(os.Getenv("SINDOOK_CONFIG_DIR"), "config.json")
+	cfgPath := filepath.Join(cfgDir, "config.json")
 	raw, err := os.ReadFile(cfgPath)
 	if err != nil {
 		t.Fatal(err)

@@ -212,20 +212,26 @@ func loadBaseline(path string) (verifyBaseline, error) {
 	if err != nil {
 		return verifyBaseline{}, err
 	}
+	return parseBaseline(raw, path)
+}
+
+// parseBaseline validates raw baseline bytes; display names the file in
+// errors ("" for anonymous input, e.g. fuzzing).
+func parseBaseline(raw []byte, display string) (verifyBaseline, error) {
 	var b verifyBaseline
 	if err := json.Unmarshal(raw, &b); err != nil {
-		return verifyBaseline{}, fmt.Errorf("sindook: parse baseline %s: %w", path, err)
+		return verifyBaseline{}, fmt.Errorf("sindook: parse baseline %s: %w", display, err)
 	}
 	if b.Version != baselineVersion {
-		return verifyBaseline{}, fmt.Errorf("sindook: unsupported baseline version %d in %s", b.Version, path)
+		return verifyBaseline{}, fmt.Errorf("sindook: unsupported baseline version %d in %s", b.Version, display)
 	}
 	index := make(map[string]bool, len(b.Entries))
 	for _, e := range b.Entries {
 		if e.File == "" || len(e.SHA256) != 64 {
-			return verifyBaseline{}, fmt.Errorf("sindook: baseline %s has a malformed entry", path)
+			return verifyBaseline{}, fmt.Errorf("sindook: baseline %s has a malformed entry", display)
 		}
 		if index[e.File] {
-			return verifyBaseline{}, fmt.Errorf("sindook: baseline %s lists %s twice", path, e.File)
+			return verifyBaseline{}, fmt.Errorf("sindook: baseline %s lists %s twice", display, e.File)
 		}
 		index[e.File] = true
 	}
