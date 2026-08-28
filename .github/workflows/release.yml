@@ -166,6 +166,24 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # Replace goreleaser's generated commit-log body with the curated
+      # docs/CHANGELOG.md section before promoting. A missing section keeps
+      # the generated body; release-notes.sh exits 0 in that case.
+      - name: apply changelog release notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF#refs/tags/}"
+          notes="$(bash scripts/release-notes.sh "${tag#v}")"
+          if [ -n "$notes" ]; then
+            printf '%s\n' "$notes" > /tmp/release-notes.md
+            gh release edit "$tag" --notes-file /tmp/release-notes.md --repo ruddro-roy/sindook
+            echo "::notice::applied docs/CHANGELOG.md section as release notes for $tag"
+          else
+            echo "::notice::no docs/CHANGELOG.md section for $tag; keeping generated release notes"
+          fi
       - name: publish draft release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
