@@ -56,6 +56,16 @@ decryption changes the exit code. A `-save`/`-baseline` file is JSON with
 verified_at}]`; loading rejects an unknown `version`, and future changes
 are additive like the config file.
 
+`scan -json` (added during v0.10 development) reports one object
+`{version, platform, mode, targets, errors, warnings}` where `targets` is
+one `{target, checks, errors, warnings}` per operand and `checks` follows
+the doctor check shape `{name, status, detail, remediation?}`. `status` is
+`ok`, `warning`, or `error`; the report's `errors`/`warnings` counts drive
+the exit code the same way `doctor -json` does. `scan files` never emits
+key material; `scan tls` records endpoint metadata only. Findings and
+check names are human-facing labels and may gain entries in any release;
+the envelope shape is stable within a major version.
+
 Before 1.0, the CLI is still maturing: a future minor release may add
 flags, extend `-json` output with new fields (additive), or rename a
 command, but any user-visible change is announced in the changelog

@@ -30,9 +30,10 @@ import (
 const usageScan = `usage: sindook scan tls [-json] [-timeout SECONDS] HOST[:PORT]...
        sindook scan files [-json] [PATH...]
 
-Audit cryptographic posture without changing anything. Both modes are
-strictly read-only: scan opens ordinary connections or reads files and
-never sends exploit payloads, guesses credentials, or captures traffic.
+Audit cryptographic posture without changing anything. Scan endpoints you
+operate or are authorized to assess. Both modes are strictly read-only:
+scan opens ordinary connections or reads files and never sends exploit
+payloads, guesses credentials, or captures traffic.
 
 tls audits live endpoints (port 443 unless given): certificate expiry
 and key strength, chain and hostname validity, legacy protocol

@@ -186,8 +186,9 @@ X-Wing vectors plus a round trip and tamper check after a fresh install.
 ## Audit your crypto posture
 
 `scan` reports which of your endpoints and key files rely on
-cryptography that is expiring, misconfigured, or quantum-vulnerable. It
-is read-only: no exploit payloads, no credential guessing, no traffic
+cryptography that is expiring, misconfigured, or quantum-vulnerable.
+Scan endpoints you operate or are authorized to assess. It is
+read-only: no exploit payloads, no credential guessing, no traffic
 capture.
 
     sindook scan tls example.com mail.example.com:993
