@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/ruddro-roy/sindook/internal/baseline"
 )
 
 func fileSHA256(t *testing.T, path string) string {
@@ -36,11 +38,11 @@ func TestVerifyBaselineSaveAndCompare(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var saved verifyBaseline
+	var saved baseline.Record
 	if err := json.Unmarshal(raw, &saved); err != nil {
 		t.Fatal(err)
 	}
-	if saved.Version != baselineVersion || len(saved.Entries) != 2 {
+	if saved.Version != baseline.Version || len(saved.Entries) != 2 {
 		t.Fatalf("saved baseline = %+v", saved)
 	}
 	wantSHA := fileSHA256(t, a+ext)
@@ -155,7 +157,7 @@ func TestVerifyBaselineSaveExcludesFailuresAndFlagGuards(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var saved verifyBaseline
+	var saved baseline.Record
 	if err := json.Unmarshal(raw, &saved); err != nil {
 		t.Fatal(err)
 	}

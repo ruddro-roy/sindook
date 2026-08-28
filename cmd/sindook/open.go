@@ -17,6 +17,7 @@ import (
 
 	"github.com/ruddro-roy/sindook/box"
 	"github.com/ruddro-roy/sindook/internal/armor"
+	"github.com/ruddro-roy/sindook/internal/baseline"
 	"github.com/ruddro-roy/sindook/internal/memguard"
 	"github.com/ruddro-roy/sindook/xwing"
 )
@@ -200,54 +201,13 @@ type verifyOutcome struct {
 	failErr error
 }
 
-const baselineVersion = 1
-
-// verifyBaseline is the on-disk record written by -save and read by
-// -baseline: which sealed files were proven restorable, when, and the
-// exact ciphertext digest that passed. version is checked on load; the
-// format gains fields only, matching the additive migration policy.
-type verifyBaseline struct {
-	Version   int             `json:"version"`
-	CreatedAt string          `json:"created_at"`
-	Entries   []baselineEntry `json:"entries"`
-}
-
-type baselineEntry struct {
-	File       string `json:"file"`
-	SHA256     string `json:"sha256"`
-	Size       *int64 `json:"size,omitempty"`
-	VerifiedAt string `json:"verified_at"`
-}
-
-func loadBaseline(path string) (verifyBaseline, error) {
+// loadBaseline reads and validates a baseline file written by -save.
+func loadBaseline(path string) (baseline.Record, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
-		return verifyBaseline{}, err
+		return baseline.Record{}, err
 	}
-	return parseBaseline(raw, path)
-}
-
-// parseBaseline validates raw baseline bytes; display names the file in
-// errors ("" for anonymous input, e.g. fuzzing).
-func parseBaseline(raw []byte, display string) (verifyBaseline, error) {
-	var b verifyBaseline
-	if err := json.Unmarshal(raw, &b); err != nil {
-		return verifyBaseline{}, fmt.Errorf("sindook: parse baseline %s: %w", display, err)
-	}
-	if b.Version != baselineVersion {
-		return verifyBaseline{}, fmt.Errorf("sindook: unsupported baseline version %d in %s", b.Version, display)
-	}
-	index := make(map[string]bool, len(b.Entries))
-	for _, e := range b.Entries {
-		if e.File == "" || len(e.SHA256) != 64 {
-			return verifyBaseline{}, fmt.Errorf("sindook: baseline %s has a malformed entry", display)
-		}
-		if index[e.File] {
-			return verifyBaseline{}, fmt.Errorf("sindook: baseline %s lists %s twice", display, e.File)
-		}
-		index[e.File] = true
-	}
-	return b, nil
+	return baseline.Parse(raw, path)
 }
 
 func cmdVerify(args []string) error {
@@ -292,20 +252,20 @@ func cmdVerify(args []string) error {
 	if err != nil {
 		return err
 	}
-	var baseline verifyBaseline
-	var baselineIndex map[string]baselineEntry
+	var record baseline.Record
+	var baselineIndex map[string]baseline.Entry
 	if *baselinePath != "" {
-		baseline, err = loadBaseline(*baselinePath)
+		record, err = loadBaseline(*baselinePath)
 		if err != nil {
 			return err
 		}
-		baselineIndex = make(map[string]baselineEntry, len(baseline.Entries))
-		for _, e := range baseline.Entries {
+		baselineIndex = make(map[string]baseline.Entry, len(record.Entries))
+		for _, e := range record.Entries {
 			baselineIndex[e.File] = e
 		}
 		// A bare -baseline run re-verifies exactly the recorded file set.
 		if len(inputs) == 0 && len(globs) == 0 {
-			for _, e := range baseline.Entries {
+			for _, e := range record.Entries {
 				inputs = append(inputs, e.File)
 			}
 		}
@@ -376,7 +336,7 @@ func cmdVerify(args []string) error {
 		results = append(results, o.res)
 	}
 	if baselineIndex != nil {
-		for _, e := range baseline.Entries {
+		for _, e := range record.Entries {
 			if checked[e.File] {
 				continue
 			}
@@ -390,12 +350,12 @@ func cmdVerify(args []string) error {
 	}
 	if *savePath != "" {
 		now := time.Now().UTC().Format(time.RFC3339)
-		baselineOut := verifyBaseline{Version: baselineVersion, CreatedAt: now}
+		baselineOut := baseline.Record{Version: baseline.Version, CreatedAt: now}
 		for _, res := range results {
 			if res.Status != "ok" {
 				continue
 			}
-			baselineOut.Entries = append(baselineOut.Entries, baselineEntry{
+			baselineOut.Entries = append(baselineOut.Entries, baseline.Entry{
 				File: res.File, SHA256: res.SHA256, Size: res.Size, VerifiedAt: now,
 			})
 		}
@@ -441,7 +401,7 @@ func cmdVerify(args []string) error {
 // classifyOne verifies one file and classifies the result against the
 // baseline index (nil when not comparing). progress enables the per-file
 // stderr meter; it is only safe from a single worker.
-func classifyOne(inPath string, id *xwing.PrivateKey, pass []byte, decompress bool, maxDecompressed int64, wantHash bool, baselineIndex map[string]baselineEntry, progress bool) verifyOutcome {
+func classifyOne(inPath string, id *xwing.PrivateKey, pass []byte, decompress bool, maxDecompressed int64, wantHash bool, baselineIndex map[string]baseline.Entry, progress bool) verifyOutcome {
 	name, sum, size, err := verifyOne(inPath, id, pass, decompress, maxDecompressed, wantHash, progress)
 	out := verifyOutcome{res: verifyResult{File: name}}
 	if wantHash {

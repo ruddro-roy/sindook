@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/ruddro-roy/sindook/internal/baseline"
 )
 
 // TestVerifyJobsMatchesSerial verifies many files serially and with -jobs,
@@ -90,7 +92,7 @@ func TestVerifyJobsMatchesSerial(t *testing.T) {
 	}
 	// created_at/verified_at timestamps differ between runs; the entry sets
 	// must still match exactly.
-	var ba, bb verifyBaseline
+	var ba, bb baseline.Record
 	if err := json.Unmarshal(a, &ba); err != nil {
 		t.Fatal(err)
 	}
