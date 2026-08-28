@@ -44,6 +44,18 @@ meaning; new ones may appear in minor versions. Machine-facing output
 (`-json`, exit codes) is stable. Human-readable text is not an interface and
 may change in any release.
 
+`verify -json` reports one array of `{file, status, error?, sha256?, size?,
+baseline_sha256?}`; `sha256` (of the sealed ciphertext) and `size` appear
+only with `-save` or `-baseline`, and `baseline_sha256` only in `-baseline`
+comparisons. Status is `ok` or `failed` in plain runs; baseline runs may
+additionally report `changed` (restores cleanly but the sealed bytes differ
+from the baseline), `new` (not in the baseline), and `missing` (in the
+baseline but absent from disk). Baseline drift is report-only: only failed
+decryption changes the exit code. A `-save`/`-baseline` file is JSON with
+`version: 1`, `created_at`, and `entries: [{file, sha256, size?,
+verified_at}]`; loading rejects an unknown `version`, and future changes
+are additive like the config file.
+
 Before 1.0, the CLI is still maturing: a future minor release may add
 flags, extend `-json` output with new fields (additive), or rename a
 command, but any user-visible change is announced in the changelog

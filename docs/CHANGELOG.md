@@ -7,6 +7,19 @@ clear entry here, as described in [docs/COMPATIBILITY.md](COMPATIBILITY.md).
 
 ## [Unreleased]
 
+### Added
+
+- Verification baselines. `sindook verify -save BASELINE` records every
+  verified file (path, sealed-file SHA-256, size, timestamp) in a JSON
+  baseline; a later `sindook verify -baseline BASELINE` re-verifies and
+  reports unchanged files, files whose sealed bytes changed, new files,
+  and baseline entries missing from disk. With `-baseline` and no file
+  operands, exactly the recorded set is verified. Baseline drift is
+  report-only: only failed decryption changes the exit code. `-json`
+  output gains optional `sha256`, `size`, and `baseline_sha256` fields,
+  and the baseline format follows the same additive, versioned policy as
+  the config file (docs/COMPATIBILITY.md).
+
 ## [v0.9.0] - 2026-08-27
 
 ### Added

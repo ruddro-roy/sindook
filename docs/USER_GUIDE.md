@@ -231,6 +231,27 @@ sindook seal -r @alice -glob "reports/*.pdf"
 
 This is the right command for backup checks. `open` streams authenticated chunks. If a file is damaged late in the stream, bytes already emitted are authenticated, but the command still fails because the complete file did not authenticate. When opening to a file path, Sindook removes a partial new output on failure. Do not treat a failed stdout pipeline as a complete file.
 
+### Restorability baselines
+
+Baselines turn one-off checks into a drift history. Record which sealed
+files were proven restorable, then compare later runs against the record:
+
+```sh
+sindook verify -i personal.key -save baseline.json backups/*.sindook
+sindook verify -i personal.key -baseline baseline.json
+```
+
+The baseline stores each file's path, the SHA-256 of the sealed
+ciphertext that passed, the size, and the verification time — never
+plaintext or keys. A comparison run reports files that verify unchanged,
+files whose sealed bytes changed since the baseline, new files, and
+baseline entries missing from disk. With `-baseline` and no file
+operands, exactly the recorded set is re-verified. Drift is reported
+but only failed decryption changes the exit code, so a nightly job can
+alert on authentication failures while logging drift. In `-json` output
+each entry carries `status`, the actual `sha256`, and the
+`baseline_sha256` for comparison.
+
 ## Inspect without credentials
 
 ```sh

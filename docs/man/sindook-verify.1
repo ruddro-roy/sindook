@@ -5,8 +5,14 @@ sindook-verify \- confirm sealed files decrypt cleanly, writing nothing
 .B sindook verify
 [\fB\-i\fP \fIIDENTITY\fP | \fB\-p\fP | \fB\-passfile\fP \fIFILE\fP]
 [\fB\-identity-passfile\fP \fIFILE\fP] [\fB\-z\fP] [\fB\-max-decompressed\fP \fISIZE\fP]
-[\fB\-glob\fP \fIPATTERN\fP]...
-[\fIFILE\fP...]
+[\fB\-glob\fP \fIPATTERN\fP]... [\fB\-save\fP \fIBASELINE\fP |
+\fB\-baseline\fP \fIBASELINE\fP] [\fIFILE\fP...]
+.SH BASELINES
+\fB\-save\fP records every verified file (path, sealed\-file SHA\-256, size,
+timestamp) in a JSON baseline; \fB\-baseline\fP compares a later run
+against it and reports unchanged, changed, new, and missing files. With
+\fB\-baseline\fP and no operands, exactly the recorded set is verified.
+Drift is reported but only failed decryption changes the exit code.
 .SH DESCRIPTION
 Fully decrypts and authenticates sealed files without writing
 plaintext anywhere. Confirms a backup will actually open before it is
