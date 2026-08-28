@@ -7,6 +7,8 @@ clear entry here, as described in [docs/COMPATIBILITY.md](COMPATIBILITY.md).
 
 ## [Unreleased]
 
+## [v0.9.0] - 2026-08-27
+
 ### Added
 
 - Recipient groups. `sindook contacts group add team alice bob` saves a

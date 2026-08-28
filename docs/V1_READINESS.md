@@ -6,7 +6,7 @@ that only external parties can provide (independent review, adoption,
 fuzzing history). Presence here does not create a deadline; it is the
 evidence a future 1.0 decision must be able to point at.
 
-## Completed through v0.8.1
+## Completed through v0.9.0
 
 (v0.7.1 was prepared but never tagged or published; its changes are part
 of v0.8.1. See docs/CHANGELOG.md.)
@@ -29,7 +29,7 @@ of v0.8.1. See docs/CHANGELOG.md.)
 - Installer and package-manifest improvements: fail-closed installer
   checksum handling and multi-file winget manifests.
 
-## Completed in v0.9 development
+## Completed in v0.9.0
 
 - Public Go API decision: `box` (seal, open, rewrap, inspect, selftest)
   and `xwing` are the public, versioned library API with the stability
@@ -58,7 +58,7 @@ of v0.8.1. See docs/CHANGELOG.md.)
   and documented in docs/RELEASING.md. The release script's doctor
   check is hermetic (scratch HOME, generated identity).
 
-## Required before v0.9.0
+## Required before future releases
 
 - The recovery drill is documented in docs/RELEASING.md; it gets a real
   exercise the first time a release breaks (not a claim until then).
