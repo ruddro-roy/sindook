@@ -19,6 +19,12 @@ FILE_OWNERS.md
 # local agent-loop scratchpads
 .cursor/
 
+# local security-gate state (findings ledger, hook state, reports)
+.mimosa/
+
+# compiled test harness binary
+.sindook-test-bin/
+
 # agent rule files must never enter the repo
 AGENTS.md
 CLAUDE.md
