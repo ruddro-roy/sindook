@@ -280,6 +280,7 @@ X-Wing implementation.
 
 ## Project documentation
 
+- [Engineering practices](docs/ENGINEERING.md)
 - [User guide](docs/USER_GUIDE.md)
 - [Threat model](docs/THREAT_MODEL.md)
 - [Security model](docs/SECURITY.md) and [security reporting policy](SECURITY.md)
