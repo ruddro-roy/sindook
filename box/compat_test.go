@@ -478,3 +478,109 @@ func TestV010Fixtures(t *testing.T) {
 		t.Fatal("v0.10.0 recipient fixture opened with a stranger identity")
 	}
 }
+
+// ---- v0.11.1 fixtures ------------------------------------------------------
+//
+// v011-passphrase.sindook, v011-recipient.sindook, and
+// v011-compressed.sindook were produced by the published v0.11.1 release
+// binary (verified against the release checksums.txt before use, via
+// scripts/seal-release-fixtures.sh), with:
+//
+//	sindook seal -passfile pass.txt -o v011-passphrase.sindook plain.txt
+//	sindook seal -r id.key.pub -o v011-recipient.sindook plain.txt
+//	sindook seal -z -r id.key.pub -o v011-compressed.sindook plain.txt
+//
+// This is the release that shipped `rotate` (attempt-driven bulk
+// identity retirement); it did not change the file format, and this
+// fixture chain is the proof for the next release. No v0.11.0 release
+// exists: that tag never passed the release gate (see CHANGELOG).
+
+// v011Plaintext is the content sealed into the v0.11.1 fixtures.
+const v011Plaintext = "compatibility fixture: 0.11.1\nthe rotate era begins\n"
+
+// v011Passphrase opens v011-passphrase.sindook. TEST-ONLY.
+const v011Passphrase = "fixture-passphrase-v011"
+
+// v011IdentityB64 is the base64 of the TEST-ONLY v0.11.1 identity file
+// that opens v011-recipient.sindook and v011-compressed.sindook. It lives
+// here because *.key files are gitignored by design.
+const v011IdentityB64 = `IyBzaW5kb29rIGlkZW50aXR5LCBjcmVhdGVkIDIwMjYtMDgtMzFUMDM6MzU6MTZaCiMgcHVibGljOiBzaW5kb29rcGsxOk12aFp2VHdiMHRkUmVZVlJ4b0pQRWt5bWJib3I4aVhBN2JWTC91eWtJbGNnS0JGMy94VEhmdEZqYTlFNWpjT2wyRkNTN1hzckdKRmVGVW1rUjVvWW1nUkc4SG9sNGN3TDZXRktyR2t5dDRRVEJ5Vnh0N29GTkhKUnFkdEtuOE0rUmJnL1p4YStqSXhONDRtVUtQS0VTZnh6eXZFcW1Lb3pwa0luSVpwKzV2b1R1cWNoTE9vSzYzc3hiNFVMTkJ4dHErVmN2L0pDWlBkOGJnVXQwL1J3Mm9rSUYydE1HeWw0QnVuUDFxQXg5WENTRnZ5aVh2Q3VTREZ5cGNLcjliVncvOFN2OFdpOHJBVE93VHk2U1hoclpjVzRWVUpFUEJoTWlVSWlFTklObXhjNHRhQWFXcXNkVkptcEgwV1Z5SktmU1pyQjVqQXZ3QUY1TmRPMUxRVVlOU3pMcGdaSjdtbTZRdEt0N2R3WGdTU1VjUEd3V0xveWFZVTNhcHR5R2FNSStleWlzTVVLUitCemg1QW9aV3FjQjZ3SlpsWURBS3g4Y05WQXhpbkZ4Y29FVDJkNGl5VXFCb3hsWEdhR3FrbVZNemtvMGlFM1Bic3I3eXQwVzBobjZGaVRtcGVUVy9xNjYrc1FPc0tYRGFjVEFVY2R3d3N0bTlkbEpWdWFVTEtiUFZZVHVVSUhpbkt5OG9NaktrUVFPN3BQNXdkN3drSjFMcnJBWXV5K09kc3hiZGVCNWR1ckVGUmwrRGE3Nm5SVE5rS2ltWmtpTVZ5L2NSaWM1N2RQYndXK3NKcDFmRUNnODBra2h4Z0hxOGx5Q2lLSWNWbUJtVVU5N29TaXVoZ2wwZk9wbDlHOEpHa0dzY0ZvODdKQVhYbEpGaFdJU0tJTHdUYXNLc3hrbkJyTFlZRVFJU3doYlBkaWNQWUxEOUIwclBvb21MWUozYncyOWlhU1UrQnlMSVcxR1dtYjR5TXFjOFdBczJkM3B6RjlmN0doSDZpSE4zcU9JYU9HZTVzdHVEVnFkS1NMM1htNElPeTJBSk9sSVBuTXZPb1Q0ZFlxUEhGSXY2Uldxa3EyeU1LYjN3ZkJuY3hEcC9ObjJoeVlralZIR0dFZ0pTa0VXK1pEaDlNZ1lGc0ludW96NmRhV2krZ0NOMEdUbk5tc09hUlBzcnNIV0d1eDNuUXRoY3E1dWhvQys1eEU4Q085OFhZUTV0REdaM2pOanhlTncrQTNKQWc5VHJXc210eEk5NW92ZVNWdzZCUk1VYWJKelhjY1h6VXBOenJPMzVPbE9ZQnlQdHhIS2lVci9OeHY3WUFobitaUWc5QzVkTUZnQlpBRnlFdDBlMU11ZnhoNEpHb1VOWGdHYWxqR2F3Z3BySkdGdURXSkh6U25aZlZacm9RaXY3ZTlUTFZDYnBnVE9QSEp0RlJhV2ZjcGs5UnNGcFJUWFR0dGRJYWdQdFI2aHliSlBiSkdyZEVuSVhNZFRySUxXU1JkSUZWdGUrV2phaW1CSS9kQ3J5VTltU2JEUFpDb1d2ZGhQNE1UYSt0WUxwaWN2bU11SVZkTWRoaE5KOHFEaDNSUnF6QVYxMGx4OTRBRkQ2cVJ0VEZ5Um9HdXZuT2pHemluRXNzZm50QTl5c0JIMkRLMTByZHdCaG1zNEhZZlZFaVJtaHBUYjFkSGh3Z29tU05ieEJxUEp0UVlYWWtvM09TeEl3dXhJMWxKcWRUUFdqQ004bkZDYmNnekVqaGtRdkl4K2VBbkYvbDNqc0N5ZldOYnN3eUxreVZ6SWx6UFh4ZGlCSG9TNW1sNDlYSktJNkYwcWNVeDNya29yWUcwL2tXSkNSRUZYRVIrZ2lrMGkvVW5jTE5pemtuSndIWmt3OVNUTWt4MHhuaGZ5RGNEZHhZZ1h2TmJzd0NRV0dFc0U3T21GZFVpeFVrL2VjVmNRS1lUWjd0bFhKZDRZOHNXT1BaSms1YXZhZnA1RElJeVF1bHlEaGZBYWhVNXNFWXl2WlVBekVrbFpVTzI1L3RTTDdpRnBwWmdtUllYUUFjZVd0azdCN0QvTXB4RFkwcGpHNStoc2RTckZYNWlVdjhXRFllcDVPQ0VNdFJIdnZJY0lCK2RmcVdFUjBUbE12a2ZNTCtTZW1Ob0RYbkhJSW9Bb0ZxdWNBCnNpbmRvb2tzazE6VmdLcmV0dHJSTXpwaUZhY2NWMGN0TjUyOEp2eVRLYlJSVUFxWTZldHUvMAo=`
+
+// v011IdentityKey materializes the embedded v0.11.1 identity.
+func v011IdentityKey(t *testing.T) *xwing.PrivateKey {
+	t.Helper()
+	return embeddedIdentityKey(t, v011IdentityB64, "v0.11.1")
+}
+
+// TestV011Fixtures proves current code opens every fixture produced by
+// the published v0.11.1 binary: plain, recipient, and compressed paths,
+// with negative cases so the fixtures cannot pass through a lenient path.
+func TestV011Fixtures(t *testing.T) {
+	id := v011IdentityKey(t)
+
+	t.Run("passphrase", func(t *testing.T) {
+		blob, err := os.ReadFile("testdata/v011-passphrase.sindook")
+		if err != nil {
+			t.Fatal(err)
+		}
+		out, err := openWith(t, blob, nil, []byte(v011Passphrase))
+		if err != nil {
+			t.Fatalf("v0.11.1 passphrase fixture: %v", err)
+		}
+		if !bytes.Equal(out, []byte(v011Plaintext)) {
+			t.Fatalf("v0.11.1 passphrase fixture plaintext = %q, want %q", out, v011Plaintext)
+		}
+	})
+
+	t.Run("recipient", func(t *testing.T) {
+		blob, err := os.ReadFile("testdata/v011-recipient.sindook")
+		if err != nil {
+			t.Fatal(err)
+		}
+		out, err := openWith(t, blob, id, nil)
+		if err != nil {
+			t.Fatalf("v0.11.1 recipient fixture: %v", err)
+		}
+		if !bytes.Equal(out, []byte(v011Plaintext)) {
+			t.Fatalf("v0.11.1 recipient fixture plaintext = %q, want %q", out, v011Plaintext)
+		}
+	})
+
+	t.Run("compressed", func(t *testing.T) {
+		blob, err := os.ReadFile("testdata/v011-compressed.sindook")
+		if err != nil {
+			t.Fatal(err)
+		}
+		gz, err := openWith(t, blob, id, nil)
+		if err != nil {
+			t.Fatalf("v0.11.1 compressed fixture: %v", err)
+		}
+		zr, err := gzip.NewReader(bytes.NewReader(gz))
+		if err != nil {
+			t.Fatalf("v0.11.1 compressed fixture is not gzip: %v", err)
+		}
+		out, err := io.ReadAll(zr)
+		if err != nil {
+			t.Fatalf("v0.11.1 compressed fixture gunzip: %v", err)
+		}
+		if !bytes.Equal(out, []byte(v011Plaintext)) {
+			t.Fatalf("v0.11.1 compressed fixture plaintext = %q, want %q", out, v011Plaintext)
+		}
+	})
+
+	// Negative cases: wrong credentials must still fail.
+	passBlob, err := os.ReadFile("testdata/v011-passphrase.sindook")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := openWith(t, passBlob, nil, []byte("wrong")); err == nil {
+		t.Fatal("v0.11.1 passphrase fixture opened with a wrong passphrase")
+	}
+	recBlob, err := os.ReadFile("testdata/v011-recipient.sindook")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := openWith(t, recBlob, newIdentity(t), nil); err == nil {
+		t.Fatal("v0.11.1 recipient fixture opened with a stranger identity")
+	}
+}
