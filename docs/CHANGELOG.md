@@ -5,7 +5,7 @@ All notable user-visible changes are documented here. The format follows
 uses semantic versioning. Pre-1.0 releases may change commands with a
 clear entry here, as described in [docs/COMPATIBILITY.md](COMPATIBILITY.md).
 
-## [Unreleased]
+## [v0.11.0] - 2026-08-31
 
 ### Added
 
