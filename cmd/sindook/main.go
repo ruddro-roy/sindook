@@ -28,9 +28,15 @@ const (
 // default, so source-tree builds stay visibly unreleased.
 var version = "0.11.1-dev"
 
-const usageMain = `sindook seals files with hybrid X25519 + ML-KEM-768 recipient slots
-and can rotate access without decrypting or re-encrypting the payload in
-fast mode. Fast rewrap still copies ciphertext to a replacement file.
+const usageMain = `sindook encrypts files with hybrid post-quantum keys (X-Wing:
+X25519 + ML-KEM-768). It is command-driven like git; there is no
+interactive shell to enter.
+
+start in three commands:
+
+  sindook init                 create your identity (once)
+  sindook seal FILE            encrypt a file
+  sindook open FILE.sindook    decrypt it again
 
 usage: sindook <command> [flags] [FILE...]
 

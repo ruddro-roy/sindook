@@ -22,6 +22,10 @@ clear entry here, as described in [docs/COMPATIBILITY.md](COMPATIBILITY.md).
   failed; skipping is not a failure. Fast mode inherits rewrap's limits: it
   does not revoke recipients who already hold a copy of the old file, and
   `-deep` re-encrypts under a fresh file key.
+- Running `sindook` with no command now leads with the three-command
+  quick start (`init`, `seal`, `open`) and states that the tool is
+  command-driven, before the full command list. Human-facing text only;
+  exit codes and `-json` are unchanged.
 
 ## [v0.11.0] - 2026-08-31
 
