@@ -26,7 +26,7 @@ const (
 // module version carried in the binary's build info when it is a real
 // release tag, as produced by "go install ...@v0.7.1"; (3) this dev
 // default, so source-tree builds stay visibly unreleased.
-var version = "0.11.0-dev"
+var version = "0.11.1-dev"
 
 const usageMain = `sindook seals files with hybrid X25519 + ML-KEM-768 recipient slots
 and can rotate access without decrypting or re-encrypting the payload in

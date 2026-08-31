@@ -5,7 +5,7 @@ All notable user-visible changes are documented here. The format follows
 uses semantic versioning. Pre-1.0 releases may change commands with a
 clear entry here, as described in [docs/COMPATIBILITY.md](COMPATIBILITY.md).
 
-## [v0.11.0] - 2026-08-31
+## [v0.11.1] - 2026-08-31
 
 ### Added
 
@@ -22,6 +22,15 @@ clear entry here, as described in [docs/COMPATIBILITY.md](COMPATIBILITY.md).
   failed; skipping is not a failure. Fast mode inherits rewrap's limits: it
   does not revoke recipients who already hold a copy of the old file, and
   `-deep` re-encrypts under a fresh file key.
+
+## [v0.11.0] - 2026-08-31
+
+Never released. The tag was cut from a tree whose windows-latest CI job
+failed: a new rotate test asserted walk output with a hard-coded path
+separator. The release pipeline stopped at its CI gate and published
+nothing; tags are immutable, so no v0.11.0 release exists. The module
+proxy serves the tag and its code is functional (the failure was in a
+test, not the tool); everything below first shipped in v0.11.1.
 
 ## [v0.10.0] - 2026-08-28
 
