@@ -71,9 +71,26 @@ gh auth status >/dev/null 2>&1 || {
 	exit 1
 }
 
-# The contents API needs the existing blob's sha to update it, and 404
-# means the tap does not carry the formula yet (first push).
-blob_sha=$(gh api "repos/$tap/contents/sindook.rb" --jq .sha 2>/dev/null || true)
+# The contents API needs the existing blob's sha to update it, and a
+# missing file means a first push. gh prints its 404 error object to
+# stdout, so a plain capture would swallow it into the payload: accept
+# only a real 40-character hex sha, and search both common locations.
+tap_path=""
+blob_sha=""
+for candidate in sindook.rb Formula/sindook.rb; do
+	sha=$(gh api "repos/$tap/contents/$candidate" --jq .sha 2>/dev/null || true)
+	case "$sha" in
+	[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]*)
+		tap_path=$candidate
+		blob_sha=$sha
+		break
+		;;
+	esac
+done
+[ -n "$tap_path" ] || {
+	echo "update-tap: found no sindook.rb at the tap root or Formula/ in $tap" >&2
+	exit 1
+}
 # Base64 output can wrap; newlines are invalid inside a JSON string, and
 # the base64 alphabet needs no further JSON escaping.
 content=$(base64 < "$formula" | tr -d '\n')
@@ -88,7 +105,7 @@ payload=$(mktemp "$tmp/payload.XXXXXX")
 	printf '}'
 } > "$payload"
 
-gh api -X PUT "repos/$tap/contents/sindook.rb" --input "$payload" >/dev/null
+gh api -X PUT "repos/$tap/contents/$tap_path" --input "$payload" >/dev/null
 
-echo "tap updated: $tap sindook.rb -> $version"
+echo "tap updated: $tap $tap_path -> $version"
 echo "verify: brew install ruddro-roy/sindook/sindook && sindook version"
