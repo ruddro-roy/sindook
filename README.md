@@ -294,7 +294,6 @@ X-Wing implementation.
 - [Security model](docs/SECURITY.md) and [security reporting policy](SECURITY.md)
 - [Format specification](docs/FORMAT.md) and [compatibility promise](docs/COMPATIBILITY.md)
 - [Release process](docs/RELEASING.md)
-- [Roadmap](docs/ROADMAP.md)
 - [Changelog](docs/CHANGELOG.md) and [v1 readiness](docs/V1_READINESS.md)
 - [Contributing](CONTRIBUTING.md)
 
