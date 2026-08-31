@@ -20,7 +20,7 @@ import (
 // The suite drives the real cmd* entry points with temp files; passphrases
 // always come from -passfile so no test needs a terminal.
 
-func write(t *testing.T, path string, data []byte) string {
+func write(t testing.TB, path string, data []byte) string {
 	t.Helper()
 	if err := os.WriteFile(path, data, 0o600); err != nil {
 		t.Fatal(err)
@@ -28,14 +28,14 @@ func write(t *testing.T, path string, data []byte) string {
 	return path
 }
 
-func mustRun(t *testing.T, f func([]string) error, args ...string) {
+func mustRun(t testing.TB, f func([]string) error, args ...string) {
 	t.Helper()
 	if err := f(args); err != nil {
 		t.Fatalf("%v: %v", args, err)
 	}
 }
 
-func newIdentity(t *testing.T, dir, name string) (keyPath, pubPath string) {
+func newIdentity(t testing.TB, dir, name string) (keyPath, pubPath string) {
 	t.Helper()
 	keyPath = filepath.Join(dir, name)
 	mustRun(t, cmdKeygen, "-o", keyPath)

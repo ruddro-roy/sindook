@@ -21,7 +21,7 @@ import (
 // captureStdout redirects os.Stdout to a temp file while fn runs and returns
 // everything written. Passphrase prompts still go to stderr/the terminal, so
 // tests that capture stdout must use -passfile or credential-less commands.
-func captureStdout(t *testing.T, fn func() error) (string, error) {
+func captureStdout(t testing.TB, fn func() error) (string, error) {
 	t.Helper()
 	tmp, err := os.CreateTemp(t.TempDir(), "stdout-*.txt")
 	if err != nil {
