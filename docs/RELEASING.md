@@ -175,12 +175,21 @@ manifest hashes by hand.
 Every release extends the format-contract fixture chain: files sealed by
 the just-published binary, committed so later releases prove they still
 read them (the v0.9.0 round added `box/testdata/v090-*.sindook` the same
-way). After the release is public, download the released archive for your
-platform, verify it against `checksums.txt`, and seal the fixtures with
-the released binary following the header comment in
-`box/compat_test.go`. Commit the fixtures (and the test cases that open
-them) in a follow-up commit — never before the release exists, because
-the fixtures must be sealed by the published binary, not a local build.
+way). After the release is public:
+
+```sh
+scripts/seal-release-fixtures.sh X.Y.Z ["flavor line"]
+```
+
+The script downloads the released archive for your platform, verifies it
+against `checksums.txt`, seals the three fixtures with the released
+binary, re-opens each one with the same binary before accepting it, and
+copies them into `box/testdata`. It refuses to overwrite existing
+fixtures and prints the constants to add to `box/compat_test.go`; the
+test cases that open the fixtures are added by hand following the
+previous release's block. Commit the fixtures and tests in a follow-up
+commit — never before the release exists, because the fixtures must be
+sealed by the published binary, not a local build.
 
 ### Homebrew
 
@@ -196,7 +205,17 @@ brew test packaging/homebrew/sindook.rb
 
 Publish it by adding `packaging/homebrew` as a tap (for example a
 `homebrew-sindook` repository with the formula at the root), or by
-submitting it to a central tap the project endorses.
+submitting it to a central tap the project endorses. The project tap is
+`ruddro-roy/homebrew-sindook`, which has no sync workflow by design;
+push the refreshed formula to it with one command:
+
+```sh
+scripts/update-tap.sh X.Y.Z
+```
+
+The script re-checks every formula digest against the published
+`checksums.txt` before pushing and commits with the project's noreply
+identity.
 
 ### Scoop
 
