@@ -162,7 +162,7 @@ func TestRotateJobsMatchesSerial(t *testing.T) {
 	}
 	// Walk output must be sorted, and the wrong-suffix file never attempted.
 	for _, n := range []string{"a", "b", "c", "d", "e"} {
-		if !strings.Contains(parallel, "/"+n+".txt.sindook: rotated") {
+		if !strings.Contains(parallel, filepath.Join(sub, n+".txt.sindook")+": rotated") {
 			t.Fatalf("%s missing from walk output:\n%s", n, parallel)
 		}
 	}
