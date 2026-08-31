@@ -20,7 +20,7 @@ const bashCompletion = `_sindook() {
     local cur cmd
     cur="${COMP_WORDS[COMP_CWORD]}"
     if [ "$COMP_CWORD" -eq 1 ]; then
-        COMPREPLY=($(compgen -W "keygen init pubkey contacts config paths seal open verify inspect rewrap shred scan selftest doctor completion version help" -- "$cur"))
+        COMPREPLY=($(compgen -W "keygen init pubkey contacts config paths seal open verify inspect rewrap rotate shred scan selftest doctor completion version help" -- "$cur"))
         return
     fi
     cmd="${COMP_WORDS[1]}"
@@ -34,7 +34,7 @@ const bashCompletion = `_sindook() {
         scan)
             COMPREPLY=($(compgen -W "tls files -json -timeout" -- "$cur")); return ;;
         help)
-            COMPREPLY=($(compgen -W "keygen init pubkey contacts config paths seal open verify inspect rewrap shred scan selftest doctor completion version" -- "$cur")); return ;;
+            COMPREPLY=($(compgen -W "keygen init pubkey contacts config paths seal open verify inspect rewrap rotate shred scan selftest doctor completion version" -- "$cur")); return ;;
     esac
     if [[ "$cur" == -* ]]; then
         local opts=""
@@ -49,6 +49,7 @@ const bashCompletion = `_sindook() {
             paths)   opts="-json" ;;
 			doctor)  opts="-json -check-version" ;;
 			rewrap)  opts="-i -p -passfile -identity-passfile -r -R -new-passphrase -new-passfile -glob -deep -o -f" ;;
+		rotate)  opts="-i -identity-passfile -to -deep -jobs -json -glob" ;;
 			shred)   opts="-n -glob" ;;
         esac
         COMPREPLY=($(compgen -W "$opts" -- "$cur"))
@@ -74,6 +75,7 @@ _sindook() {
         'verify:confirm sealed files decrypt cleanly'
         'inspect:show sealed-file metadata'
         'rewrap:rotate recipients, passphrases, or the file key'
+        'rotate:retire an old identity across many sealed files'
         'shred:overwrite and delete regular plaintext files'
         'scan:audit TLS endpoints and local keys for weak crypto'
         'selftest:run a fast built-in cryptographic sanity check'
@@ -88,7 +90,7 @@ _sindook() {
     fi
     case "$words[2]" in
         completion) _values 'shell' bash zsh fish powershell ;;
-        help)       _values 'command' keygen init pubkey contacts config paths seal open verify inspect rewrap shred scan selftest doctor completion version ;;
+        help)       _values 'command' keygen init pubkey contacts config paths seal open verify inspect rewrap rotate shred scan selftest doctor completion version ;;
         contacts)   _values 'subcommand' list add show remove group add-member remove-member -json -f ;;
         config)     _values 'subcommand' list get set unset -json ;;
         scan)       _values 'mode' tls files -json -timeout ;;
@@ -109,6 +111,7 @@ complete -c sindook -f -n '__fish_use_subcommand' -a open -d 'decrypt with an id
 complete -c sindook -f -n '__fish_use_subcommand' -a verify -d 'confirm sealed files decrypt cleanly'
 complete -c sindook -f -n '__fish_use_subcommand' -a inspect -d 'show sealed-file metadata'
 complete -c sindook -f -n '__fish_use_subcommand' -a rewrap -d 'rotate recipients, passphrases, or the file key'
+complete -c sindook -f -n '__fish_use_subcommand' -a rotate -d 'retire an old identity across many sealed files'
 complete -c sindook -f -n '__fish_use_subcommand' -a shred -d 'overwrite and delete regular plaintext files'
 complete -c sindook -f -n '__fish_use_subcommand' -a scan -d 'audit TLS endpoints and local keys for weak crypto'
 complete -c sindook -f -n '__fish_use_subcommand' -a selftest -d 'run a fast built-in cryptographic sanity check'
@@ -117,9 +120,9 @@ complete -c sindook -f -n '__fish_use_subcommand' -a completion -d 'print a shel
 complete -c sindook -f -n '__fish_use_subcommand' -a version -d 'print version and build provenance'
 complete -c sindook -f -n '__fish_use_subcommand' -a help -d 'show help for a command'
 complete -c sindook -f -n '__fish_seen_subcommand_from completion' -a 'bash zsh fish powershell'
-complete -c sindook -f -n '__fish_seen_subcommand_from help' -a 'keygen init pubkey contacts config paths seal open verify inspect rewrap shred scan selftest doctor completion version'
+complete -c sindook -f -n '__fish_seen_subcommand_from help' -a 'keygen init pubkey contacts config paths seal open verify inspect rewrap rotate shred scan selftest doctor completion version'
 complete -c sindook -f -n '__fish_seen_subcommand_from scan' -a 'tls files'
-complete -c sindook -n '__fish_seen_subcommand_from seal open verify inspect rewrap shred pubkey scan' -F
+complete -c sindook -n '__fish_seen_subcommand_from seal open verify inspect rewrap rotate shred pubkey scan' -F
 `
 
 const powershellCompletion = `$sindookCommands = @(
@@ -134,6 +137,7 @@ const powershellCompletion = `$sindookCommands = @(
     [pscustomobject]@{ Name = 'verify'; Description = 'confirm sealed files decrypt cleanly' }
     [pscustomobject]@{ Name = 'inspect'; Description = 'show sealed-file metadata' }
     [pscustomobject]@{ Name = 'rewrap'; Description = 'rotate recipients, passphrases, or the file key' }
+    [pscustomobject]@{ Name = 'rotate'; Description = 'retire an old identity across many sealed files' }
     [pscustomobject]@{ Name = 'shred'; Description = 'overwrite and delete regular plaintext files' }
     [pscustomobject]@{ Name = 'scan'; Description = 'audit TLS endpoints and local keys for weak crypto' }
     [pscustomobject]@{ Name = 'selftest'; Description = 'run a fast built-in cryptographic sanity check' }
@@ -171,6 +175,7 @@ Register-ArgumentCompleter -Native -CommandName sindook -ScriptBlock {
         'scan' { @('tls', 'files', '-json', '-timeout') }
         'doctor' { @('-json', '-check-version') }
         'rewrap' { @('-i', '-p', '-passfile', '-identity-passfile', '-r', '-R', '-new-passphrase', '-new-passfile', '-glob', '-deep', '-o', '-f') }
+        'rotate' { @('-i', '-identity-passfile', '-to', '-deep', '-jobs', '-json', '-glob') }
         'shred' { @('-n', '-glob') }
         default { @() }
     }

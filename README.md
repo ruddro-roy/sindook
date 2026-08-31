@@ -61,7 +61,8 @@ Everything else is still one line:
 - `rewrap` rotates access later: add or remove people, switch passphrases,
   or upgrade old format versions without decrypting the payload in fast
   mode. `-deep` re-encrypts under a fresh file key when someone must lose
-  access to the replacement.
+  access to the replacement. `rotate` applies that to a whole tree when
+  one identity must lose access everywhere, with a per-file report.
 - Compression built in with `seal -z` and `open -z`, bounded at 1 TiB of
   expansion by default (`-max-decompressed`). A 1.5 MB server log seals
   to a few kilobytes, and a hostile archive cannot fill the disk.
@@ -142,6 +143,7 @@ post-quantum recipients and rotation without a full re-encrypt.
     sindook verify FILE.sindook           # check it opens, write nothing
     sindook inspect FILE.sindook          # metadata, no credentials needed
     sindook rewrap -r @bob FILE.sindook   # rotate access
+    sindook rotate -i old.key -to @team backups/  # retire an identity in bulk
     sindook config get default-identity   # inspect saved settings
     sindook doctor                        # check the installation
     sindook help seal                     # flags and examples
@@ -160,6 +162,12 @@ Rotate access in place. Fast mode keeps the payload ciphertext as is; use
 
     sindook rewrap -r @alice -r bob.pub archive.tar.sindook
     sindook rewrap -r @alice -deep archive.tar.sindook
+
+Retire one identity from every file it can open. `rotate` attempts each
+file with the old identity, rewraps the ones it opens, and reports the
+rest as skipped, so nothing sealed to it is missed silently:
+
+    sindook rotate -i offboarded.key -to @team -deep vault/
 
 Streams, batches, and portable wildcard expansion for shells without it:
 

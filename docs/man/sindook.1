@@ -50,6 +50,9 @@ show sealed-file metadata, no credentials needed
 .B rewrap
 rotate recipients, passphrases, or the file key
 .TP
+.B rotate
+retire an old identity across many sealed files
+.TP
 .B shred
 overwrite files before deleting them
 .TP
@@ -103,6 +106,7 @@ the repository documentation before protecting sensitive data.
 .BR sindook-verify (1),
 .BR sindook-inspect (1),
 .BR sindook-rewrap (1),
+.BR sindook-rotate (1),
 .BR sindook-shred (1),
 .BR sindook-selftest (1),
 .BR sindook-doctor (1),

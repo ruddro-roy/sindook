@@ -1,0 +1,63 @@
+.TH SINDOOK-ROTATE 1 "2026-08-31" "sindook 0.10.0" "User Commands"
+.SH NAME
+sindook-rotate \- retire an old identity across many sealed files
+.SH SYNOPSIS
+.B sindook rotate -i
+\fIIDENTITY\fP (\fB\-to\fP \fIRECIPIENT\fP)... [\fB\-deep\fP]
+[\fB\-jobs\fP \fIN\fP] [\fB\-glob\fP \fIPATTERN\fP]... [\fB\-json\fP]
+\fIDIR\fP|\fIFILE\fP...
+.SH DESCRIPTION
+Retires an identity from sealed files in bulk. Every candidate file is
+opened with \fIIDENTITY\fP; files it opens are rewrapped to the \fB\-to\fP
+recipients, files it cannot open are reported as skipped. Use it when
+one identity must lose access to everything: offboarding, a
+compromised key, or a periodic hygiene pass. The identity being
+retired must be held, because authenticated opening is what decides
+which files match; the current format has no metadata filter.
+.PP
+Rotation replaces each file's slot set with exactly the \fB\-to\fP
+recipients. Fast mode keeps the payload ciphertext; \fB\-deep\fP
+re-encrypts under a fresh file key. Fast mode does not revoke
+recipients who already hold a copy of the old file. Files are staged
+beside their original path and replaced only after a successful
+write.
+.PP
+Directory operands are walked for *.sindook files; explicit
+\fIFILE\fP operands are attempted whatever their name. Every file is
+attempted even if an earlier one fails, and the exit code is non-zero
+only when a rewrap failed; skipped files are not failures.
+.SH OPTIONS
+.TP
+\fB\-i\fP \fIIDENTITY\fP
+the identity being retired (required)
+.TP
+\fB\-identity-passfile\fP \fIFILE\fP
+read a protected identity's passphrase from \fIFILE\fP
+.TP
+\fB\-to\fP \fIRECIPIENT\fP
+new recipient, repeatable; the replacement file is sealed to exactly
+these recipients
+.TP
+\fB\-deep\fP
+re-encrypt the payload under a fresh file key
+.TP
+\fB\-jobs\fP \fIN\fP
+rotate up to N files concurrently (default: up to 4 for multiple
+files, 1 for a single file)
+.TP
+\fB\-glob\fP \fIPATTERN\fP
+add files matched by a portable filesystem pattern, repeatable
+.TP
+\fB\-json\fP
+print one machine-readable JSON array with per-file status instead of
+human-readable lines
+.SH EXAMPLES
+.nf
+sindook rotate -i old.key -to @team backups/
+sindook rotate -i offboarded.key -to personal.key.pub -deep -jobs 8 vault/
+sindook rotate -i old.key -to alice.pub -glob "archive/*.sindook"
+.fi
+.SH SEE ALSO
+.BR sindook (1),
+.BR sindook-rewrap (1),
+.BR sindook-verify (1)

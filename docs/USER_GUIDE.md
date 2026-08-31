@@ -320,6 +320,22 @@ sindook rewrap -i personal.key -r alice.pub -deep archive.tar.sindook
 
 Deep rewrap creates a fresh file key and streams a new payload. Keep the old ciphertext inaccessible if revocation matters.
 
+When one identity must lose access to everything, `rotate` walks a tree and
+rewraps every file that identity can open:
+
+```sh
+sindook rotate -i offboarded.key -to @team -deep vault/
+```
+
+Each file is attempted with the old identity, so authentication decides what
+matches: files it opens are rewrapped to exactly the `-to` recipients, files
+it cannot open are reported as `skipped` with the reason, and a failed
+rewrap is `failed` and leaves the original file untouched. The summary line
+counts all three. Skipping is not a failure and does not change the exit
+code; you hold the old identity, so a file it cannot open was never sealed
+to it. The same fast-versus-deep rule from rewrap applies, and `-deep` is
+the right default when retiring a compromised key.
+
 ## Shred plaintext files
 
 `shred` overwrites a file with pseudorandom data and then unlinks it, so the

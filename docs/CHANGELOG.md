@@ -5,6 +5,24 @@ All notable user-visible changes are documented here. The format follows
 uses semantic versioning. Pre-1.0 releases may change commands with a
 clear entry here, as described in [docs/COMPATIBILITY.md](COMPATIBILITY.md).
 
+## [Unreleased]
+
+### Added
+
+- `sindook rotate -i IDENTITY (-to RECIPIENT)... [-deep] [-jobs N]
+  [-glob PATTERN]... [-json] DIR|FILE...`, bulk retirement of one identity.
+  Every candidate file is opened with the identity being retired; files it
+  opens are rewrapped to exactly the `-to` recipients, files it cannot open
+  are reported as `skipped` with the reason, and a failed rewrap is
+  `failed` and leaves the original file untouched. Directory operands are
+  walked for `*.sindook` files, `-jobs` reuses the bounded worker pool from
+  `verify`, and `-json` reports one array of `{file, status, error?}` with
+  status `rotated`, `skipped`, or `failed` (documented in
+  docs/COMPATIBILITY.md). The exit code is non-zero only when a rewrap
+  failed; skipping is not a failure. Fast mode inherits rewrap's limits: it
+  does not revoke recipients who already hold a copy of the old file, and
+  `-deep` re-encrypts under a fresh file key.
+
 ## [v0.10.0] - 2026-08-28
 
 ### Added

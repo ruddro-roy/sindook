@@ -45,6 +45,7 @@ usage: sindook <command> [flags] [FILE...]
   verify      confirm sealed files decrypt cleanly, writing nothing
   inspect     show sealed-file metadata, no credentials needed
   rewrap      rotate recipients, passphrases, or the file key
+  rotate      retire an old identity across many sealed files
   shred       overwrite and delete regular plaintext files
   scan        audit TLS endpoints and local keys for weak crypto
   selftest    run a fast built-in cryptographic sanity check
@@ -70,6 +71,7 @@ var commands = map[string]struct {
 	"verify":     {cmdVerify, usageVerify},
 	"inspect":    {cmdInspect, usageInspect},
 	"rewrap":     {cmdRewrap, usageRewrap},
+	"rotate":     {cmdRotate, usageRotate},
 	"shred":      {cmdShred, usageShred},
 	"scan":       {cmdScan, usageScan},
 	"selftest":   {cmdSelftest, usageSelftest},

@@ -112,7 +112,7 @@ func cmdRewrap(args []string) error {
 	}
 	var errs []error
 	for _, path := range inputs {
-		if err := rewrapInPlace(path, id, pass, opts, *deep); err != nil {
+		if err := rewrapInPlace(path, id, pass, opts, *deep, true); err != nil {
 			errs = append(errs, err)
 		}
 	}
@@ -137,8 +137,9 @@ func rewrapStream(w io.Writer, r io.Reader, id *xwing.PrivateKey, pass []byte, o
 }
 
 // rewrapInPlace stages the rewrapped file next to the original and replaces
-// the original only after a complete, successful write.
-func rewrapInPlace(path string, id *xwing.PrivateKey, pass []byte, opts box.SealOptions, deep bool) error {
+// the original only after a complete, successful write. progress enables the
+// stderr meter and is only safe from a single worker (see cmdVerify).
+func rewrapInPlace(path string, id *xwing.PrivateKey, pass []byte, opts box.SealOptions, deep, progress bool) error {
 	pathInfo, err := os.Lstat(path)
 	if err != nil {
 		return err
@@ -179,7 +180,10 @@ func rewrapInPlace(path string, id *xwing.PrivateKey, pass []byte, opts box.Seal
 		tmp.Close()
 		os.Remove(tmp.Name())
 	}
-	src := withProgress(in, info.Size(), "rewrap "+path)
+	var src io.Reader = in
+	if progress {
+		src = withProgress(in, info.Size(), "rewrap "+path)
+	}
 	if err := rewrapStream(tmp, src, id, pass, opts, deep); err != nil {
 		cleanup()
 		return err

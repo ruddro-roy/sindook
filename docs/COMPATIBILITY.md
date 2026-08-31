@@ -56,6 +56,13 @@ decryption changes the exit code. A `-save`/`-baseline` file is JSON with
 verified_at}]`; loading rejects an unknown `version`, and future changes
 are additive like the config file.
 
+`rotate -json` (added during v0.11 development) reports one array of
+`{file, status, error?}` per attempted file; `error` appears only when
+non-empty. Status is `rotated` (the identity opened it and the file was
+rewrapped), `skipped` (the identity cannot open it, or the file is damaged
+or not a sindook file), or `failed` (the rewrap itself errored; the
+original file is untouched). Only `failed` makes the exit code non-zero.
+
 `scan -json` (added during v0.10 development) reports one object
 `{version, platform, mode, targets, errors, warnings}` where `targets` is
 one `{target, checks, errors, warnings}` per operand and `checks` follows
