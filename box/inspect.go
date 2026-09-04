@@ -70,10 +70,15 @@ func inspectV2(br *bufio.Reader) (*Info, error) {
 		}
 		s := SlotInfo{Type: head[0], Body: bodyLen}
 		if s.Type == SlotPassphrase && bodyLen == passSlotBody {
-			s.Argon = &Argon2idParams{
+			p := Argon2idParams{
 				Time:      binary.BigEndian.Uint32(body[0:4]),
 				MemoryKiB: binary.BigEndian.Uint32(body[4:8]),
 				Threads:   body[8],
+			}
+			// unlockV2 skips a slot whose argon2id parameters exceed the
+			// caps, so Inspect describes the slot but withholds its claim.
+			if err := p.validate(); err == nil {
+				s.Argon = &p
 			}
 		}
 		info.Slots = append(info.Slots, s)
@@ -106,11 +111,17 @@ func inspectV1(br *bufio.Reader) (*Info, error) {
 		if _, err := io.ReadFull(br, body); err != nil {
 			return nil, ErrNotSindook
 		}
-		s.Argon = &Argon2idParams{
+		p := Argon2idParams{
 			Time:      binary.BigEndian.Uint32(body[0:4]),
 			MemoryKiB: binary.BigEndian.Uint32(body[4:8]),
 			Threads:   body[8],
 		}
+		// unlockV1 rejects a v1 header whose argon2id parameters exceed the
+		// caps; Inspect reports the same error instead of exposing them.
+		if err := p.validate(); err != nil {
+			return nil, err
+		}
+		s.Argon = &p
 	default:
 		return nil, ErrNotSindook
 	}

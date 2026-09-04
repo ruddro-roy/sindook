@@ -2,8 +2,11 @@ package box
 
 import (
 	"bytes"
+	"encoding/binary"
 	"os"
 	"testing"
+
+	"golang.org/x/crypto/chacha20poly1305"
 
 	"github.com/ruddro-roy/sindook/xwing"
 )
@@ -85,6 +88,48 @@ func TestInspectRejectsGarbage(t *testing.T) {
 		if _, err := Inspect(bytes.NewReader(in)); err == nil {
 			t.Fatalf("garbage accepted: %q", in)
 		}
+	}
+}
+
+// A v1 passphrase file whose argon2id parameters exceed the caps is not
+// inspectable: unlockV1 rejects such headers outright, so Inspect must too
+// instead of presenting the hostile KDF claim as sane metadata.
+func TestInspectRejectsHostileArgonV1(t *testing.T) {
+	buf := []byte(magicV1)
+	buf = append(buf, modeV1Passphrase)
+	buf = binary.BigEndian.AppendUint32(buf, 0x22222222) // Time
+	buf = binary.BigEndian.AppendUint32(buf, 0x22222222) // MemoryKiB
+	buf = append(buf, 40)                                // Threads
+	buf = append(buf, make([]byte, saltSize+fileNonceSize+fileKeySize+chacha20poly1305.Overhead)...)
+	if _, err := Inspect(bytes.NewReader(buf)); err == nil {
+		t.Fatal("Inspect accepted out-of-range argon2id parameters")
+	}
+}
+
+// In v2 the same hostile parameters affect one slot among possibly many, and
+// unlockV2 merely skips that slot, so Inspect must still describe the file
+// while withholding the slot's argon2id claim.
+func TestInspectWithholdsHostileArgonV2(t *testing.T) {
+	body := make([]byte, passSlotBody)
+	binary.BigEndian.PutUint32(body[0:4], 0x22222222) // Time
+	binary.BigEndian.PutUint32(body[4:8], 0x22222222) // MemoryKiB
+	body[8] = 40                                      // Threads
+	buf := []byte(magicV2)
+	buf = append(buf, make([]byte, fileNonceSize)...) // file nonce
+	buf = append(buf, 1)                              // slot count
+	buf = append(buf, SlotPassphrase)
+	buf = binary.BigEndian.AppendUint16(buf, uint16(passSlotBody))
+	buf = append(buf, body...)
+	buf = append(buf, make([]byte, macSize)...)
+	info, err := Inspect(bytes.NewReader(buf))
+	if err != nil {
+		t.Fatalf("Inspect rejected an otherwise valid v2 header: %v", err)
+	}
+	if len(info.Slots) != 1 || info.Slots[0].Type != SlotPassphrase {
+		t.Fatalf("passphrase slot missing: %+v", info.Slots)
+	}
+	if info.Slots[0].Argon != nil {
+		t.Fatalf("Inspect exposed out-of-range argon2id parameters: %+v", info.Slots[0].Argon)
 	}
 }
 
