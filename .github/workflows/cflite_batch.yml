@@ -58,10 +58,10 @@ jobs:
           sanitizer: address
       # fuzz-seconds is the total budget, divided across every target with
       # unused time rolling forward to later ones. At 600 s each merge got
-      # ~37 s, which stopped being enough once the baseline_parse corpus
-      # passed ~900 inputs (~0.3 s per merge-exec under ASan). 7200 s
-      # guarantees >=450 s per merge — a cap, not a duration, so it costs
-      # nothing on success; a healthy prune finishes in minutes.
+      # ~37 s, which stopped being enough once the slow targets crossed a
+      # few hundred inputs (box_inspect runs ~0.5 s per merge-exec under
+      # ASan). 7200 s guarantees >=450 s per merge — a cap, not a duration,
+      # so it costs nothing on success; a healthy prune finishes in minutes.
       - name: Prune corpus
         id: run
         uses: google/clusterfuzzlite/actions/run_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1 # v1
