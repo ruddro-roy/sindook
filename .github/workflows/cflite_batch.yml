@@ -48,6 +48,7 @@ jobs:
   pruning:
     runs-on: ubuntu-latest
     needs: batch-fuzzing
+    timeout-minutes: 300
     steps:
       - name: Build fuzzers
         id: build
@@ -55,12 +56,18 @@ jobs:
         with:
           language: go
           sanitizer: address
+      # fuzz-seconds is the total budget, divided across every target with
+      # unused time rolling forward to later ones. At 600 s each merge got
+      # ~37 s, which stopped being enough once the baseline_parse corpus
+      # passed ~900 inputs (~0.3 s per merge-exec under ASan). 7200 s
+      # guarantees >=450 s per merge — a cap, not a duration, so it costs
+      # nothing on success; a healthy prune finishes in minutes.
       - name: Prune corpus
         id: run
         uses: google/clusterfuzzlite/actions/run_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1 # v1
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          fuzz-seconds: 600
+          fuzz-seconds: 7200
           mode: prune
           sanitizer: address
           storage-repo: https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/ruddro-roy/sindook.git
@@ -68,12 +75,20 @@ jobs:
       # Prune merges can die on transient runner conditions (corpus sync
       # hiccups, disk pressure). One retry keeps the daily cycle alive
       # without hiding anything: both attempts stay visible in the logs.
+      # run_fuzzers refuses to start if out/artifacts already has files
+      # from the first attempt, so clear that directory before retrying.
+      # Targets already pruned and uploaded by attempt one re-merge in
+      # seconds, so the retry lands nearly the whole budget on whichever
+      # target timed out.
+      - name: Reset prune artifacts
+        if: failure()
+        run: rm -rf "${GITHUB_WORKSPACE}/out/artifacts"
       - name: Prune corpus (retry)
         if: failure()
         uses: google/clusterfuzzlite/actions/run_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1 # v1
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          fuzz-seconds: 600
+          fuzz-seconds: 7200
           mode: prune
           sanitizer: address
           storage-repo: https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/ruddro-roy/sindook.git

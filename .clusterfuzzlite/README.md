@@ -3,7 +3,9 @@
 ClusterFuzzLite (CFLite) continuously fuzzes sindook's parsers and crypto
 code: on every pull request that touches Go code (`.github/workflows/cflite_pr.yml`,
 300 s, code-change mode) and daily in batch mode (`.github/workflows/cflite_batch.yml`,
-1800 s) followed by a corpus-pruning job (600 s, prune mode). Batch runs
+1800 s) followed by a corpus-pruning job (7200 s, prune mode). The prune
+budget is divided across every target, so it has to stay large enough for
+libFuzzer to merge the largest corpora (~0.3 s per input under ASan). Batch runs
 persist their corpus to the `corpora` branch of this repository, so each
 run starts from everything earlier runs found, and the workflow fails
 unless that branch actually advanced — the storage branch must exist on
