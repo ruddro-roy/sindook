@@ -250,7 +250,7 @@ func rotateOne(path string, id *xwing.PrivateKey, opts box.SealOptions, deep, pr
 	res := rotateResult{File: path}
 	err := attemptOpen(path, id, progress)
 	if err == nil {
-		if err := rewrapInPlace(path, id, nil, opts, deep, progress); err != nil {
+		if err := rewrapInPlace(path, rewrapOp{id: id, opts: opts, deep: deep}, progress); err != nil {
 			res.Status = "failed"
 			res.Error = err.Error()
 			return res, err

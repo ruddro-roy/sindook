@@ -68,6 +68,8 @@ Rewrap parses a header (either version), recovers the file key with any valid cr
 
 Fast mode does not revoke a removed recipient who kept a copy of the old file, because the file key is unchanged. Deep mode makes the replacement inaccessible through old slots, but cannot invalidate older copies.
 
+Incremental edits (`box.RewrapEdit`, `rewrap -keep` and the `-drop-*` flags) carry surviving slots forward verbatim instead of regenerating the whole set. A slot's wrap is bound to the file nonce and the slot's own public parameters, and both travel inside the slot body, so a copied slot unwraps identically under the rewritten header — the file nonce is unchanged and the header MAC is recomputed. Passphrase slots and unrecognized future slot types carry the same way. Slots can be dropped by number (the `inspect` listing), by type (all passphrase slots), or by the credential that opens them; every selector must match at least one slot. On a v1 file the single implicit wrap cannot be carried verbatim, so a kept v1 credential is re-created as a v2 slot: the recipient public key comes from the identity used to open the file, the passphrase slot from the passphrase itself.
+
 ## Format v1, legacy
 
 Read support only. A v1 file is header, wrapped file key (48 bytes, ChaCha20-Poly1305, zero nonce, associated data the entire header), payload as above.

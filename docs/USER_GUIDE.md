@@ -320,6 +320,17 @@ sindook rewrap -i personal.key -r alice.pub -deep archive.tar.sindook
 
 Deep rewrap creates a fresh file key and streams a new payload. Keep the old ciphertext inaccessible if revocation matters.
 
+When the whole slot set should not be respecified, `-keep` preserves the existing slots and the `-drop-*` flags remove matching ones (every drop flag implies `-keep`):
+
+```sh
+sindook rewrap -i personal.key -keep -r carol.pub archive.tar.sindook  # add carol
+sindook rewrap -i personal.key -drop-slot 2 archive.tar.sindook        # remove slot 2
+sindook rewrap -i personal.key -drop-i old.key -r new.pub f.sindook    # swap old for new
+sindook rewrap -i personal.key -drop-pass-slots f.sindook              # strip passphrases
+```
+
+Kept slots are copied verbatim, so a passphrase slot survives without re-entering the passphrase. Slot numbers are the ones `sindook inspect` prints; `-drop-i`/`-drop-p`/`-drop-passfile` remove every slot that opens under a given credential, which is how you retire a key you hold without respecifying the survivors. Every drop selector must match at least one slot, and an edit may not leave a file with no slots. These edits are all fast-mode: `-deep` cannot combine with `-keep` or `-drop-*`, because a fresh file key invalidates every kept slot.
+
 When one identity must lose access to everything, `rotate` walks a tree and
 rewraps every file that identity can open:
 

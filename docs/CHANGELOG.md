@@ -5,6 +5,26 @@ All notable user-visible changes are documented here. The format follows
 uses semantic versioning. Pre-1.0 releases may change commands with a
 clear entry here, as described in [docs/COMPATIBILITY.md](COMPATIBILITY.md).
 
+## [Unreleased]
+
+### Added
+
+- `sindook rewrap` gains incremental slot edits. `-keep` preserves the
+  existing slots — passphrase slots included, without re-entering them —
+  while `-r`/`-R`/`-new-*` append new ones, and the drop flags remove
+  matching slots: `-drop-slot N` (the numbering `inspect` prints),
+  `-drop-i IDENTITY`, `-drop-p`, `-drop-passfile FILE` (every slot that
+  opens under the named credential), and `-drop-pass-slots` (every
+  passphrase slot). Drop flags imply `-keep`; each selector must match at
+  least one slot, and an edit may not leave a file with no slots. The
+  `-deep` flag cannot combine with `-keep`/`-drop-*` because a fresh file
+  key invalidates every kept slot. On v1 input `-keep` re-creates the
+  opening credential as a v2 slot, upgrading the file in place. The
+  library API is `box.RewrapEdit` taking a `box.SlotEdit`; kept slots are
+  carried verbatim (a wrap is bound to the file nonce and the slot's own
+  public parameters) and the payload is copied untouched, so every edit is
+  a fast-mode rewrap with the same revocation caveat.
+
 ## [v0.11.1] - 2026-08-31
 
 ### Added

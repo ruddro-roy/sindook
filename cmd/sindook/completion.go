@@ -48,7 +48,7 @@ const bashCompletion = `_sindook() {
             inspect) opts="-json -glob" ;;
             paths)   opts="-json" ;;
 			doctor)  opts="-json -check-version" ;;
-			rewrap)  opts="-i -p -passfile -identity-passfile -r -R -new-passphrase -new-passfile -glob -deep -o -f" ;;
+			rewrap)  opts="-i -p -passfile -identity-passfile -keep -drop-slot -drop-i -drop-p -drop-passfile -drop-pass-slots -r -R -new-passphrase -new-passfile -glob -deep -o -f" ;;
 		rotate)  opts="-i -identity-passfile -to -deep -jobs -json -glob" ;;
 			shred)   opts="-n -glob" ;;
         esac
@@ -174,7 +174,7 @@ Register-ArgumentCompleter -Native -CommandName sindook -ScriptBlock {
         'paths' { @('-json') }
         'scan' { @('tls', 'files', '-json', '-timeout') }
         'doctor' { @('-json', '-check-version') }
-        'rewrap' { @('-i', '-p', '-passfile', '-identity-passfile', '-r', '-R', '-new-passphrase', '-new-passfile', '-glob', '-deep', '-o', '-f') }
+        'rewrap' { @('-i', '-p', '-passfile', '-identity-passfile', '-keep', '-drop-slot', '-drop-i', '-drop-p', '-drop-passfile', '-drop-pass-slots', '-r', '-R', '-new-passphrase', '-new-passfile', '-glob', '-deep', '-o', '-f') }
         'rotate' { @('-i', '-identity-passfile', '-to', '-deep', '-jobs', '-json', '-glob') }
         'shred' { @('-n', '-glob') }
         default { @() }

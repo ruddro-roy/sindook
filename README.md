@@ -163,6 +163,15 @@ Rotate access in place. Fast mode keeps the payload ciphertext as is; use
     sindook rewrap -r @alice -r bob.pub archive.tar.sindook
     sindook rewrap -r @alice -deep archive.tar.sindook
 
+Or edit the slot set instead of replacing it: `-keep` preserves existing
+slots (passphrases included, no re-entry needed), `-drop-*` removes
+matching slots, and `-r`/`-new-*` append:
+
+    sindook rewrap -keep -r @carol archive.tar.sindook      # add carol
+    sindook rewrap -drop-i old.key -r @alice FILE.sindook   # swap old for alice
+    sindook rewrap -drop-slot 2 FILE.sindook                # drop inspect's slot 2
+    sindook rewrap -drop-pass-slots FILE.sindook            # strip passphrase slots
+
 Retire one identity from every file it can open. `rotate` attempts each
 file with the old identity, rewraps the ones it opens, and reports the
 rest as skipped, so nothing sealed to it is missed silently:

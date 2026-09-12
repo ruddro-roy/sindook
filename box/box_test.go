@@ -2,7 +2,9 @@ package box
 
 import (
 	"bytes"
+	"crypto/hkdf"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"io"
@@ -227,6 +229,334 @@ func TestRewrapDeep(t *testing.T) {
 	if bytes.Equal(old[v2XWingHeader:], blob[v2XWingHeader:]) {
 		t.Fatal("deep rewrap left payload bytes unchanged")
 	}
+}
+
+func rewrapEdit(t *testing.T, blob []byte, id *xwing.PrivateKey, pass []byte, edit SlotEdit) ([]byte, error) {
+	t.Helper()
+	var out bytes.Buffer
+	err := RewrapEdit(&out, bytes.NewReader(blob), id, pass, edit)
+	return out.Bytes(), err
+}
+
+// slotRecord returns the raw bytes of the nth (1-based) slot record in a
+// v2 file: type byte, length prefix, and body.
+func slotRecord(t *testing.T, blob []byte, n int) []byte {
+	t.Helper()
+	off := 25
+	for i := 1; i <= n; i++ {
+		l := 3 + (int(blob[off+1])<<8 | int(blob[off+2]))
+		if i == n {
+			return blob[off : off+l]
+		}
+		off += l
+	}
+	t.Fatalf("file has no slot %d", n)
+	return nil
+}
+
+func mustOpen(t *testing.T, blob []byte, id *xwing.PrivateKey, pass []byte, plain []byte) {
+	t.Helper()
+	out, err := openWith(t, blob, id, pass)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	if !bytes.Equal(out, plain) {
+		t.Fatal("plaintext mismatch")
+	}
+}
+
+func mustFailOpen(t *testing.T, blob []byte, id *xwing.PrivateKey, pass []byte) {
+	t.Helper()
+	if _, err := openWith(t, blob, id, pass); err == nil {
+		t.Fatal("open succeeded, want failure")
+	}
+}
+
+func TestRewrapEditKeepAdd(t *testing.T) {
+	k1, k2 := newIdentity(t), newIdentity(t)
+	plain := randomBytes(t, 300)
+	old := sealTo(t, plain, SealOptions{Recipients: [][]byte{k1.PublicKey()}})
+
+	blob, err := rewrapEdit(t, old, k1, nil, SlotEdit{
+		KeepAll: true,
+		Add:     SealOptions{Recipients: [][]byte{k2.PublicKey()}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mustOpen(t, blob, k1, nil, plain)
+	mustOpen(t, blob, k2, nil, plain)
+	// The kept slot is copied verbatim and the payload is untouched.
+	if !bytes.Equal(slotRecord(t, old, 1), slotRecord(t, blob, 1)) {
+		t.Fatal("kept slot bytes changed")
+	}
+	newHeader := 25 + 2*(3+xwingSlotBody) + macSize
+	if !bytes.Equal(old[v2XWingHeader:], blob[newHeader:]) {
+		t.Fatal("payload bytes changed")
+	}
+}
+
+func TestRewrapEditKeepOrder(t *testing.T) {
+	k1, k2, k3 := newIdentity(t), newIdentity(t), newIdentity(t)
+	old := sealTo(t, randomBytes(t, 100), SealOptions{
+		Recipients: [][]byte{k1.PublicKey(), k2.PublicKey()},
+	})
+	blob, err := rewrapEdit(t, old, k2, nil, SlotEdit{
+		KeepAll: true,
+		Add:     SealOptions{Recipients: [][]byte{k3.PublicKey()}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(slotRecord(t, old, 1), slotRecord(t, blob, 1)) ||
+		!bytes.Equal(slotRecord(t, old, 2), slotRecord(t, blob, 2)) {
+		t.Fatal("kept slots lost their order")
+	}
+	for _, k := range []*xwing.PrivateKey{k1, k2, k3} {
+		if _, err := openWith(t, blob, k, nil); err != nil {
+			t.Fatalf("recipient: %v", err)
+		}
+	}
+}
+
+func TestRewrapEditDropSlot(t *testing.T) {
+	k1, k2 := newIdentity(t), newIdentity(t)
+	plain := randomBytes(t, 300)
+	old := sealTo(t, plain, SealOptions{Recipients: [][]byte{k1.PublicKey(), k2.PublicKey()}})
+
+	blob, err := rewrapEdit(t, old, k1, nil, SlotEdit{KeepAll: true, DropSlots: []int{1}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mustFailOpen(t, blob, k1, nil)
+	mustOpen(t, blob, k2, nil, plain)
+	if info, err := Inspect(bytes.NewReader(blob)); err != nil || len(info.Slots) != 1 {
+		t.Fatalf("slots: %v %v", info, err)
+	}
+}
+
+func TestRewrapEditDropIdentity(t *testing.T) {
+	k1, k2, stranger := newIdentity(t), newIdentity(t), newIdentity(t)
+	plain := randomBytes(t, 300)
+	old := sealTo(t, plain, SealOptions{Recipients: [][]byte{k1.PublicKey(), k2.PublicKey()}})
+
+	// Drop another identity's slot while opening with k1.
+	blob, err := rewrapEdit(t, old, k1, nil, SlotEdit{KeepAll: true, DropIdentities: []*xwing.PrivateKey{k2}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mustOpen(t, blob, k1, nil, plain)
+	mustFailOpen(t, blob, k2, nil)
+
+	// Drop the very identity used to unlock, handing the file off to k2.
+	blob, err = rewrapEdit(t, old, k1, nil, SlotEdit{KeepAll: true, DropIdentities: []*xwing.PrivateKey{k1}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mustOpen(t, blob, k2, nil, plain)
+	mustFailOpen(t, blob, k1, nil)
+
+	// A key that opens no slot fails the edit rather than writing an
+	// unchanged file.
+	if _, err := rewrapEdit(t, old, k1, nil, SlotEdit{KeepAll: true, DropIdentities: []*xwing.PrivateKey{stranger}}); err == nil {
+		t.Fatal("unmatched drop identity accepted")
+	}
+}
+
+func TestRewrapEditDropPassSlots(t *testing.T) {
+	k := newIdentity(t)
+	pass := []byte("rescue")
+	plain := randomBytes(t, 300)
+	old := sealTo(t, plain, SealOptions{
+		Recipients:  [][]byte{k.PublicKey()},
+		Passphrases: [][]byte{pass},
+		Argon:       testArgon,
+	})
+
+	blob, err := rewrapEdit(t, old, k, nil, SlotEdit{KeepAll: true, DropPassSlots: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mustOpen(t, blob, k, nil, plain)
+	mustFailOpen(t, blob, nil, pass)
+
+	// Keeping while adding preserves the passphrase slot without knowing
+	// the passphrase.
+	blob, err = rewrapEdit(t, old, k, nil, SlotEdit{
+		KeepAll: true,
+		Add:     SealOptions{Recipients: [][]byte{newIdentity(t).PublicKey()}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mustOpen(t, blob, nil, pass, plain)
+
+	// The selector must match something.
+	recOnly := sealTo(t, plain, SealOptions{Recipients: [][]byte{k.PublicKey()}})
+	if _, err := rewrapEdit(t, recOnly, k, nil, SlotEdit{KeepAll: true, DropPassSlots: true}); err == nil {
+		t.Fatal("unmatched -drop-pass-slots accepted")
+	}
+}
+
+func TestRewrapEditDropPassphrase(t *testing.T) {
+	p1, p2 := []byte("first"), []byte("second")
+	plain := randomBytes(t, 300)
+	old := sealTo(t, plain, SealOptions{Passphrases: [][]byte{p1, p2}, Argon: testArgon})
+
+	// Unlock with p1, drop the slot p2 opens.
+	blob, err := rewrapEdit(t, old, nil, p1, SlotEdit{KeepAll: true, DropPassphrases: [][]byte{p2}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mustOpen(t, blob, nil, p1, plain)
+	mustFailOpen(t, blob, nil, p2)
+
+	if _, err := rewrapEdit(t, old, nil, p1, SlotEdit{KeepAll: true, DropPassphrases: [][]byte{[]byte("nope")}}); err == nil {
+		t.Fatal("unmatched drop passphrase accepted")
+	}
+}
+
+func TestRewrapEditErrors(t *testing.T) {
+	k1, k2 := newIdentity(t), newIdentity(t)
+	old := sealTo(t, randomBytes(t, 100), SealOptions{Recipients: [][]byte{k1.PublicKey()}})
+
+	// Drops without keep have nothing to apply to.
+	if _, err := rewrapEdit(t, old, k1, nil, SlotEdit{DropSlots: []int{1}}); err == nil {
+		t.Fatal("drop without KeepAll accepted")
+	}
+	// Out-of-range slot number.
+	if _, err := rewrapEdit(t, old, k1, nil, SlotEdit{KeepAll: true, DropSlots: []int{2}}); err == nil {
+		t.Fatal("out-of-range drop accepted")
+	}
+	// Dropping the only slot leaves a file nobody can open.
+	var out bytes.Buffer
+	err := RewrapEdit(&out, bytes.NewReader(old), k1, nil, SlotEdit{KeepAll: true, DropIdentities: []*xwing.PrivateKey{k1}})
+	if err == nil {
+		t.Fatal("drop-to-empty accepted")
+	}
+	if out.Len() != 0 {
+		t.Fatal("partial output written on failed edit")
+	}
+	// A kept set plus additions cannot exceed the slot cap.
+	many := [][]byte{k1.PublicKey()}
+	for i := 0; i < maxSlots-1; i++ {
+		many = append(many, newIdentity(t).PublicKey())
+	}
+	full := sealTo(t, []byte("x"), SealOptions{Recipients: many})
+	overflow := SealOptions{Recipients: [][]byte{k2.PublicKey(), newIdentity(t).PublicKey()}}
+	if _, err := rewrapEdit(t, full, k1, nil, SlotEdit{KeepAll: true, Add: overflow}); err == nil {
+		t.Fatal("slot cap not enforced on edit")
+	}
+	// The same holds for the passphrase cap: 4 kept + 1 added.
+	passes := make([][]byte, maxPassSlots)
+	for i := range passes {
+		passes[i] = []byte{byte('a' + i)}
+	}
+	passFull := sealTo(t, []byte("x"), SealOptions{Passphrases: passes, Argon: testArgon})
+	_, err = rewrapEdit(t, passFull, nil, passes[0], SlotEdit{
+		KeepAll: true,
+		Add:     SealOptions{Passphrases: [][]byte{[]byte("z")}, Argon: testArgon},
+	})
+	if err == nil {
+		t.Fatal("passphrase slot cap not enforced on edit")
+	}
+}
+
+func TestRewrapEditV1(t *testing.T) {
+	seed, _ := hex.DecodeString("7f9c2ba4e88f827d616045507605853ed73b8093f6efbc88eb1a6eacfa66ef26")
+	v1ID, err := xwing.NewPrivateKey(seed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []byte("sindook v1 golden fixture\n")
+
+	rec, err := os.ReadFile("testdata/v1-recipient.sindook")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Bare keep upgrades the file to v2 while preserving access.
+	blob, err := rewrapEdit(t, rec, v1ID, nil, SlotEdit{KeepAll: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.HasPrefix(blob, []byte(magicV2)) {
+		t.Fatal("kept v1 file did not become v2")
+	}
+	mustOpen(t, blob, v1ID, nil, want)
+
+	// Keep + add preserves the opener and appends the new recipient.
+	k2 := newIdentity(t)
+	blob, err = rewrapEdit(t, rec, v1ID, nil, SlotEdit{
+		KeepAll: true,
+		Add:     SealOptions{Recipients: [][]byte{k2.PublicKey()}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mustOpen(t, blob, v1ID, nil, want)
+	mustOpen(t, blob, k2, nil, want)
+
+	// Dropping the implicit slot while adding a recipient hands the v1
+	// file off entirely.
+	blob, err = rewrapEdit(t, rec, v1ID, nil, SlotEdit{
+		KeepAll:   true,
+		DropSlots: []int{1},
+		Add:       SealOptions{Recipients: [][]byte{k2.PublicKey()}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mustFailOpen(t, blob, v1ID, nil)
+	mustOpen(t, blob, k2, nil, want)
+
+	pw, err := os.ReadFile("testdata/v1-passphrase.sindook")
+	if err != nil {
+		t.Fatal(err)
+	}
+	blob, err = rewrapEdit(t, pw, nil, []byte("golden"), SlotEdit{
+		KeepAll: true,
+		Add:     SealOptions{Argon: testArgon},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mustOpen(t, blob, nil, []byte("golden"), want)
+}
+
+func TestRewrapEditKeepsUnknownSlots(t *testing.T) {
+	k := newIdentity(t)
+	plain := randomBytes(t, 100)
+	// A foreign writer's file can carry a slot type this version does not
+	// know; keep must carry it verbatim rather than dropping it silently.
+	fileKey := randomBytes(t, fileKeySize)
+	fileNonce := randomBytes(t, fileNonceSize)
+	var buf bytes.Buffer
+	err := writeHeaderV2(&buf, fileKey, fileNonce,
+		[]parsedSlot{{slotType: 0x7f, body: randomBytes(t, 40)}},
+		SealOptions{Recipients: [][]byte{k.PublicKey()}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	payloadKey, err := hkdf.Key(sha256.New, fileKey, fileNonce, payloadInfo, chacha20poly1305.KeySize)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := sealPayload(&buf, bytes.NewReader(plain), payloadKey); err != nil {
+		t.Fatal(err)
+	}
+	old := buf.Bytes()
+
+	blob, err := rewrapEdit(t, old, k, nil, SlotEdit{
+		KeepAll: true,
+		Add:     SealOptions{Recipients: [][]byte{newIdentity(t).PublicKey()}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(slotRecord(t, old, 1), slotRecord(t, blob, 1)) {
+		t.Fatal("unknown slot not carried verbatim")
+	}
+	mustOpen(t, blob, k, nil, plain)
 }
 
 func TestSlotStripping(t *testing.T) {

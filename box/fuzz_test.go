@@ -607,3 +607,160 @@ func FuzzInspect(f *testing.F) {
 		}
 	})
 }
+
+// FuzzRewrapEdit is the generative counterpart for incremental slot edits:
+// a four-slot file (two recipients, two passphrases) is rewritten through a
+// fuzzed selector mask, and the result must open under exactly the
+// credentials whose slots survived, with payload bytes carried verbatim.
+func FuzzRewrapEdit(f *testing.F) {
+	id1 := fuzzIdentity()
+	id2 := fuzzSecondIdentity()
+	seed3, err := hex.DecodeString("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
+	if err != nil {
+		f.Fatal(err)
+	}
+	id3, err := xwing.NewPrivateKey(seed3)
+	if err != nil {
+		f.Fatal(err)
+	}
+	stranger, err := xwing.NewPrivateKey([]byte("cccccccccccccccccccccccccccccccc"))
+	if err != nil {
+		f.Fatal(err)
+	}
+	p1, p2 := []byte("first"), []byte("second")
+
+	f.Add([]byte("seed"), uint8(0), uint8(0), false)
+	f.Add([]byte("payload"), uint8(0x1f), uint8(4), true)
+	f.Add(bytes.Repeat([]byte{0x42}, chunkSize+7), uint8(0x7f), uint8(2), false)
+
+	f.Fuzz(func(t *testing.T, plain []byte, sel, n uint8, unlockWithPass bool) {
+		var sealed bytes.Buffer
+		if err := Seal(&sealed, bytes.NewReader(plain), SealOptions{
+			Recipients:  [][]byte{id1.PublicKey(), id2.PublicKey()},
+			Passphrases: [][]byte{p1, p2},
+			Argon:       fuzzArgon,
+		}); err != nil {
+			t.Fatal(err)
+		}
+		blob := sealed.Bytes()
+
+		edit := SlotEdit{KeepAll: true}
+		dropped := map[int]bool{}
+		var wantErr bool
+		if sel&0x01 != 0 {
+			num := int(n)%5 + 1
+			edit.DropSlots = []int{num}
+			if num == 5 {
+				wantErr = true
+			} else {
+				dropped[num] = true
+			}
+		}
+		if sel&0x02 != 0 {
+			if sel&0x40 != 0 {
+				edit.DropIdentities = append(edit.DropIdentities, stranger)
+				wantErr = true // a stranger's key matches no slot
+			} else {
+				edit.DropIdentities = append(edit.DropIdentities, id2)
+				dropped[2] = true
+			}
+		}
+		if sel&0x20 != 0 {
+			edit.DropIdentities = append(edit.DropIdentities, id1)
+			dropped[1] = true
+		}
+		if sel&0x04 != 0 {
+			edit.DropPassphrases = append(edit.DropPassphrases, p2)
+			dropped[4] = true
+		}
+		if sel&0x08 != 0 {
+			edit.DropPassSlots = true
+			dropped[3] = true
+			dropped[4] = true
+		}
+		addID3 := sel&0x10 != 0
+		if addID3 {
+			edit.Add = SealOptions{Recipients: [][]byte{id3.PublicKey()}}
+		}
+		if len(dropped) == 4 && !addID3 {
+			wantErr = true
+		}
+
+		unlockID, unlockPass := id1, []byte(nil)
+		if unlockWithPass {
+			unlockID, unlockPass = nil, p1
+		}
+		var out bytes.Buffer
+		err := RewrapEdit(&out, bytes.NewReader(blob), unlockID, unlockPass, edit)
+		if wantErr {
+			if err == nil {
+				t.Fatalf("sel=%02x n=%d: expected failure, got success", sel, n)
+			}
+			return
+		}
+		if err != nil {
+			t.Fatalf("sel=%02x n=%d: %v", sel, n, err)
+		}
+		rewrapped := out.Bytes()
+
+		// Exactly the surviving credentials open, to the same plaintext.
+		creds := []struct {
+			open bool
+			id   *xwing.PrivateKey
+			pass []byte
+		}{
+			{!dropped[1], id1, nil},
+			{!dropped[2], id2, nil},
+			{!dropped[3], nil, p1},
+			{!dropped[4], nil, p2},
+			{addID3, id3, nil},
+		}
+		var survivorID *xwing.PrivateKey
+		var survivorPass []byte
+		survived := false
+		for i, c := range creds {
+			var got bytes.Buffer
+			err := Open(&got, bytes.NewReader(rewrapped), c.id, c.pass)
+			if c.open {
+				if err != nil || !bytes.Equal(got.Bytes(), plain) {
+					t.Fatalf("sel=%02x n=%d: credential %d should open: %v", sel, n, i, err)
+				}
+				if !survived {
+					survived = true
+					survivorID, survivorPass = c.id, c.pass
+				}
+			} else if err == nil {
+				t.Fatalf("sel=%02x n=%d: credential %d should not open", sel, n, i)
+			}
+		}
+		if !survived {
+			t.Fatal("edit succeeded with no surviving credential")
+		}
+
+		// Payload bytes carry over verbatim; slot bookkeeping matches.
+		infoOld, err := Inspect(bytes.NewReader(blob))
+		if err != nil {
+			t.Fatal(err)
+		}
+		infoNew, err := Inspect(bytes.NewReader(rewrapped))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(blob[infoOld.HeaderSize:], rewrapped[infoNew.HeaderSize:]) {
+			t.Fatal("edit modified payload bytes")
+		}
+		wantSlots := 4 - len(dropped)
+		if addID3 {
+			wantSlots++
+		}
+		if len(infoNew.Slots) != wantSlots {
+			t.Fatalf("sel=%02x n=%d: %d slots, want %d", sel, n, len(infoNew.Slots), wantSlots)
+		}
+		// The rewritten header is MAC'd: flipping a MAC byte fails any open.
+		mut := append([]byte(nil), rewrapped...)
+		mut[infoNew.HeaderSize-1] ^= 0x01
+		if err := Open(io.Discard, bytes.NewReader(mut), survivorID, survivorPass); err == nil {
+			t.Fatal("tampered edited header opened cleanly")
+		}
+	})
+}

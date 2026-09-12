@@ -146,7 +146,7 @@ func Seal(dst io.Writer, src io.Reader, opts SealOptions) error {
 	if _, err := rand.Read(fileNonce); err != nil {
 		return err
 	}
-	if err := writeHeaderV2(dst, fileKey, fileNonce, opts); err != nil {
+	if err := writeHeaderV2(dst, fileKey, fileNonce, nil, opts); err != nil {
 		return err
 	}
 	payloadKey, err := hkdf.Key(sha256.New, fileKey, fileNonce, payloadInfo, chacha20poly1305.KeySize)
@@ -205,11 +205,15 @@ func headerMAC(fileKey, fileNonce, header []byte) ([]byte, error) {
 	return m.Sum(nil), nil
 }
 
-func writeHeaderV2(dst io.Writer, fileKey, fileNonce []byte, opts SealOptions) error {
+// writeHeaderV2 emits a v2 header: kept slots verbatim (copied forward by
+// RewrapEdit), then fresh slots for opts.Recipients and opts.Passphrases.
+// A kept slot needs no secret to be carried: its wrap is bound to the file
+// nonce and its own public parameters, all of which travel inside the slot.
+func writeHeaderV2(dst io.Writer, fileKey, fileNonce []byte, kept []parsedSlot, opts SealOptions) error {
 	var hdr bytes.Buffer
 	hdr.WriteString(magicV2)
 	hdr.Write(fileNonce)
-	hdr.WriteByte(byte(len(opts.Recipients) + len(opts.Passphrases)))
+	hdr.WriteByte(byte(len(kept) + len(opts.Recipients) + len(opts.Passphrases)))
 
 	appendSlot := func(slotType byte, body []byte) {
 		hdr.WriteByte(slotType)
@@ -217,6 +221,10 @@ func writeHeaderV2(dst io.Writer, fileKey, fileNonce []byte, opts SealOptions) e
 		binary.BigEndian.PutUint16(l[:], uint16(len(body)))
 		hdr.Write(l[:])
 		hdr.Write(body)
+	}
+
+	for _, s := range kept {
+		appendSlot(s.slotType, s.body)
 	}
 
 	for _, pub := range opts.Recipients {
@@ -278,13 +286,22 @@ type parsedSlot struct {
 	body     []byte
 }
 
+// headerInfo is the parsed form of a sealed file's header, returned by
+// unlock so RewrapEdit can carry surviving slots forward. slots is nil for
+// v1 files, which hold a single implicit slot whose credential type is mode.
+type headerInfo struct {
+	version int
+	mode    byte
+	slots   []parsedSlot
+}
+
 // unlock reads a v1 or v2 header from br, recovers the file key with the
 // given credentials, verifies header integrity, and leaves br positioned at
 // the first payload byte.
-func unlock(br *bufio.Reader, identity *xwing.PrivateKey, passphrase []byte) (fileKey, fileNonce []byte, err error) {
+func unlock(br *bufio.Reader, identity *xwing.PrivateKey, passphrase []byte) (fileKey, fileNonce []byte, hdr headerInfo, err error) {
 	magic := make([]byte, len(magicV2))
 	if _, err := io.ReadFull(br, magic); err != nil {
-		return nil, nil, ErrNotSindook
+		return nil, nil, hdr, ErrNotSindook
 	}
 	switch string(magic) {
 	case magicV1:
@@ -292,46 +309,100 @@ func unlock(br *bufio.Reader, identity *xwing.PrivateKey, passphrase []byte) (fi
 	case magicV2:
 		return unlockV2(br, identity, passphrase)
 	default:
-		return nil, nil, ErrNotSindook
+		return nil, nil, hdr, ErrNotSindook
 	}
 }
 
-func unlockV2(br *bufio.Reader, identity *xwing.PrivateKey, passphrase []byte) ([]byte, []byte, error) {
+// trySlotXWing attempts to unwrap an X-Wing slot under id, returning the
+// file key on success. A nil key without error means the slot belongs to a
+// different recipient or is malformed.
+func trySlotXWing(s parsedSlot, fileNonce []byte, id *xwing.PrivateKey) ([]byte, error) {
+	if len(s.body) != xwingSlotBody {
+		return nil, nil
+	}
+	kemCT := s.body[:xwing.CiphertextSize]
+	ss, err := id.Decapsulate(kemCT)
+	if err != nil {
+		return nil, nil
+	}
+	defer memguard.Wipe(ss)
+	wrapKey, err := hkdf.Key(sha256.New, ss, fileNonce, wrapInfoV2, chacha20poly1305.KeySize)
+	if err != nil {
+		return nil, err
+	}
+	defer memguard.Wipe(wrapKey)
+	fk, err := wrapOpen(wrapKey, s.body[xwing.CiphertextSize:], slotAAD(fileNonce, SlotXWing, kemCT))
+	if err != nil {
+		return nil, nil
+	}
+	return fk, nil
+}
+
+// trySlotPass attempts to unwrap a passphrase slot under passphrase,
+// returning the file key on success. A nil key means a different
+// passphrase, a malformed slot, or out-of-cap KDF parameters.
+func trySlotPass(s parsedSlot, fileNonce, passphrase []byte) []byte {
+	if len(s.body) != passSlotBody {
+		return nil
+	}
+	public := s.body[:9+saltSize]
+	p := Argon2idParams{
+		Time:      binary.BigEndian.Uint32(public[0:4]),
+		MemoryKiB: binary.BigEndian.Uint32(public[4:8]),
+		Threads:   public[8],
+	}
+	if err := p.validate(); err != nil {
+		return nil
+	}
+	salt := public[9 : 9+saltSize]
+	wrapKey := argon2.IDKey(passphrase, salt, p.Time, p.MemoryKiB, p.Threads, chacha20poly1305.KeySize)
+	defer memguard.Wipe(wrapKey)
+	fk, err := wrapOpen(wrapKey, s.body[9+saltSize:], slotAAD(fileNonce, SlotPassphrase, public))
+	if err != nil {
+		return nil
+	}
+	return fk
+}
+
+func unlockV2(br *bufio.Reader, identity *xwing.PrivateKey, passphrase []byte) ([]byte, []byte, headerInfo, error) {
+	var info headerInfo
+	info.version = 2
 	var hdr bytes.Buffer
 	hdr.WriteString(magicV2)
 
 	prefix := make([]byte, fileNonceSize+1)
 	if _, err := io.ReadFull(br, prefix); err != nil {
-		return nil, nil, ErrNotSindook
+		return nil, nil, info, ErrNotSindook
 	}
 	hdr.Write(prefix)
 	fileNonce := append([]byte(nil), prefix[:fileNonceSize]...)
 	count := int(prefix[fileNonceSize])
 	if count < 1 || count > maxSlots {
-		return nil, nil, ErrNotSindook
+		return nil, nil, info, ErrNotSindook
 	}
 
 	slots := make([]parsedSlot, 0, count)
 	for i := 0; i < count; i++ {
 		head := make([]byte, 3)
 		if _, err := io.ReadFull(br, head); err != nil {
-			return nil, nil, ErrNotSindook
+			return nil, nil, info, ErrNotSindook
 		}
 		bodyLen := int(binary.BigEndian.Uint16(head[1:3]))
 		if bodyLen > maxSlotBody {
-			return nil, nil, ErrNotSindook
+			return nil, nil, info, ErrNotSindook
 		}
 		body := make([]byte, bodyLen)
 		if _, err := io.ReadFull(br, body); err != nil {
-			return nil, nil, ErrNotSindook
+			return nil, nil, info, ErrNotSindook
 		}
 		hdr.Write(head)
 		hdr.Write(body)
 		slots = append(slots, parsedSlot{slotType: head[0], body: body})
 	}
+	info.slots = slots
 	mac := make([]byte, macSize)
 	if _, err := io.ReadFull(br, mac); err != nil {
-		return nil, nil, ErrNotSindook
+		return nil, nil, info, ErrNotSindook
 	}
 
 	var sawXWing, sawPass bool
@@ -340,44 +411,20 @@ func unlockV2(br *bufio.Reader, identity *xwing.PrivateKey, passphrase []byte) (
 		switch s.slotType {
 		case SlotXWing:
 			sawXWing = true
-			if identity == nil || fileKey != nil || len(s.body) != xwingSlotBody {
+			if identity == nil || fileKey != nil {
 				continue
 			}
-			kemCT := s.body[:xwing.CiphertextSize]
-			ss, err := identity.Decapsulate(kemCT)
+			fk, err := trySlotXWing(s, fileNonce, identity)
 			if err != nil {
-				continue
+				return nil, nil, info, err
 			}
-			wrapKey, err := hkdf.Key(sha256.New, ss, fileNonce, wrapInfoV2, chacha20poly1305.KeySize)
-			if err != nil {
-				memguard.Wipe(ss)
-				return nil, nil, err
-			}
-			if fk, err := wrapOpen(wrapKey, s.body[xwing.CiphertextSize:], slotAAD(fileNonce, SlotXWing, kemCT)); err == nil {
-				fileKey = fk
-			}
-			memguard.Wipe(ss)
-			memguard.Wipe(wrapKey)
+			fileKey = fk
 		case SlotPassphrase:
 			sawPass = true
-			if passphrase == nil || fileKey != nil || len(s.body) != passSlotBody {
+			if passphrase == nil || fileKey != nil {
 				continue
 			}
-			public := s.body[:9+saltSize]
-			p := Argon2idParams{
-				Time:      binary.BigEndian.Uint32(public[0:4]),
-				MemoryKiB: binary.BigEndian.Uint32(public[4:8]),
-				Threads:   public[8],
-			}
-			if err := p.validate(); err != nil {
-				continue
-			}
-			salt := public[9 : 9+saltSize]
-			wrapKey := argon2.IDKey(passphrase, salt, p.Time, p.MemoryKiB, p.Threads, chacha20poly1305.KeySize)
-			if fk, err := wrapOpen(wrapKey, s.body[9+saltSize:], slotAAD(fileNonce, SlotPassphrase, public)); err == nil {
-				fileKey = fk
-			}
-			memguard.Wipe(wrapKey)
+			fileKey = trySlotPass(s, fileNonce, passphrase)
 		default:
 			// Unknown slot type from a future version: unusable here but
 			// still covered by the header MAC below.
@@ -385,57 +432,59 @@ func unlockV2(br *bufio.Reader, identity *xwing.PrivateKey, passphrase []byte) (
 	}
 	if fileKey == nil {
 		if identity == nil && sawXWing {
-			return nil, nil, ErrNeedIdentity
+			return nil, nil, info, ErrNeedIdentity
 		}
 		if passphrase == nil && sawPass {
-			return nil, nil, ErrNeedPassphrase
+			return nil, nil, info, ErrNeedPassphrase
 		}
-		return nil, nil, ErrWrongKey
+		return nil, nil, info, ErrWrongKey
 	}
 
 	wantMAC, err := headerMAC(fileKey, fileNonce, hdr.Bytes())
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, info, err
 	}
 	if !hmac.Equal(mac, wantMAC) {
-		return nil, nil, ErrHeaderTampered
+		return nil, nil, info, ErrHeaderTampered
 	}
-	return fileKey, fileNonce, nil
+	return fileKey, fileNonce, info, nil
 }
 
-func unlockV1(br *bufio.Reader, identity *xwing.PrivateKey, passphrase []byte) ([]byte, []byte, error) {
+func unlockV1(br *bufio.Reader, identity *xwing.PrivateKey, passphrase []byte) ([]byte, []byte, headerInfo, error) {
+	info := headerInfo{version: 1}
 	mode, err := br.ReadByte()
 	if err != nil {
-		return nil, nil, ErrNotSindook
+		return nil, nil, info, ErrNotSindook
 	}
+	info.mode = mode
 	header := append([]byte(magicV1), mode)
 
 	var wrapKey []byte
 	switch mode {
 	case modeV1Recipient:
 		if identity == nil {
-			return nil, nil, ErrNeedIdentity
+			return nil, nil, info, ErrNeedIdentity
 		}
 		rest := make([]byte, xwing.CiphertextSize+fileNonceSize)
 		if _, err := io.ReadFull(br, rest); err != nil {
-			return nil, nil, ErrNotSindook
+			return nil, nil, info, ErrNotSindook
 		}
 		header = append(header, rest...)
 		ss, err := identity.Decapsulate(rest[:xwing.CiphertextSize])
 		if err != nil {
-			return nil, nil, ErrWrongKey
+			return nil, nil, info, ErrWrongKey
 		}
 		wrapKey, err = hkdf.Key(sha256.New, ss, rest[xwing.CiphertextSize:], wrapInfoV1, chacha20poly1305.KeySize)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, info, err
 		}
 	case modeV1Passphrase:
 		if passphrase == nil {
-			return nil, nil, ErrNeedPassphrase
+			return nil, nil, info, ErrNeedPassphrase
 		}
 		rest := make([]byte, 9+saltSize+fileNonceSize)
 		if _, err := io.ReadFull(br, rest); err != nil {
-			return nil, nil, ErrNotSindook
+			return nil, nil, info, ErrNotSindook
 		}
 		header = append(header, rest...)
 		p := Argon2idParams{
@@ -444,31 +493,31 @@ func unlockV1(br *bufio.Reader, identity *xwing.PrivateKey, passphrase []byte) (
 			Threads:   rest[8],
 		}
 		if err := p.validate(); err != nil {
-			return nil, nil, err
+			return nil, nil, info, err
 		}
 		wrapKey = argon2.IDKey(passphrase, rest[9:9+saltSize], p.Time, p.MemoryKiB, p.Threads, chacha20poly1305.KeySize)
 	default:
-		return nil, nil, fmt.Errorf("sindook: unknown v1 mode 0x%02x", mode)
+		return nil, nil, info, fmt.Errorf("sindook: unknown v1 mode 0x%02x", mode)
 	}
 	fileNonce := append([]byte(nil), header[len(header)-fileNonceSize:]...)
 
 	wrapped := make([]byte, fileKeySize+chacha20poly1305.Overhead)
 	if _, err := io.ReadFull(br, wrapped); err != nil {
-		return nil, nil, ErrNotSindook
+		return nil, nil, info, ErrNotSindook
 	}
 	fileKey, err := wrapOpen(wrapKey, wrapped, header)
 	if err != nil {
 		memguard.Wipe(wrapKey)
-		return nil, nil, ErrWrongKey
+		return nil, nil, info, ErrWrongKey
 	}
 	memguard.Wipe(wrapKey)
-	return fileKey, fileNonce, nil
+	return fileKey, fileNonce, info, nil
 }
 
 // Open decrypts src into dst using whichever credential matches a key slot.
 func Open(dst io.Writer, src io.Reader, identity *xwing.PrivateKey, passphrase []byte) error {
 	br := bufio.NewReaderSize(src, chunkSize+chacha20poly1305.Overhead)
-	fileKey, fileNonce, err := unlock(br, identity, passphrase)
+	fileKey, fileNonce, _, err := unlock(br, identity, passphrase)
 	if err != nil {
 		return err
 	}
@@ -488,20 +537,21 @@ func Open(dst io.Writer, src io.Reader, identity *xwing.PrivateKey, passphrase [
 // decrypt and re-encrypt, one chunk in memory at a time. Fast mode does not
 // revoke a removed recipient who already held a copy of the old file. Deep
 // mode makes the newly produced replacement inaccessible through the old
-// file key, but cannot invalidate older copies.
+// file key, but cannot invalidate older copies. For edits that keep
+// unmentioned slots instead of replacing the whole set, see RewrapEdit.
 func Rewrap(dst io.Writer, src io.Reader, identity *xwing.PrivateKey, passphrase []byte, opts SealOptions, deep bool) error {
 	if err := opts.validate(); err != nil {
 		return err
 	}
 	br := bufio.NewReaderSize(src, chunkSize+chacha20poly1305.Overhead)
-	fileKey, fileNonce, err := unlock(br, identity, passphrase)
+	fileKey, fileNonce, _, err := unlock(br, identity, passphrase)
 	if err != nil {
 		return err
 	}
 
 	if !deep {
 		defer memguard.Wipe(fileKey)
-		if err := writeHeaderV2(dst, fileKey, fileNonce, opts); err != nil {
+		if err := writeHeaderV2(dst, fileKey, fileNonce, nil, opts); err != nil {
 			return err
 		}
 		_, err := io.Copy(dst, br)
@@ -524,7 +574,7 @@ func Rewrap(dst io.Writer, src io.Reader, identity *xwing.PrivateKey, passphrase
 	if _, err := rand.Read(newFileNonce); err != nil {
 		return err
 	}
-	if err := writeHeaderV2(dst, newFileKey, newFileNonce, opts); err != nil {
+	if err := writeHeaderV2(dst, newFileKey, newFileNonce, nil, opts); err != nil {
 		return err
 	}
 	newPayloadKey, err := hkdf.Key(sha256.New, newFileKey, newFileNonce, payloadInfo, chacha20poly1305.KeySize)
@@ -543,6 +593,193 @@ func Rewrap(dst io.Writer, src io.Reader, identity *xwing.PrivateKey, passphrase
 	// running, so unblock and join the pipe writer before wiping oldPayloadKey.
 	pr.CloseWithError(err)
 	<-done
+	return err
+}
+
+// SlotEdit describes an incremental rewrite of a sealed file's key slots:
+// which existing slots survive, which are removed, and which are appended.
+// Kept slots are copied verbatim — a slot's wrap is bound to the file nonce
+// and to its own public parameters, and both travel inside the slot — so a
+// kept slot stays valid without knowing its secret. The payload is carried
+// over unchanged, making every edit a fast-mode rewrap; rotating the file
+// key needs Rewrap with deep=true, which discards every slot.
+//
+// Drop slots are numbered 1-based, matching Inspect's listing. Every drop
+// selector must claim at least one slot: a selector that matches nothing
+// fails the operation instead of silently writing an unchanged file. Kept
+// slots keep their order and added slots follow them.
+type SlotEdit struct {
+	// KeepAll carries over every slot no drop selector claims. Without it
+	// RewrapEdit degenerates to a fast-mode Rewrap of Add.
+	KeepAll bool
+
+	// DropSlots removes slots by number.
+	DropSlots []int
+	// DropPassSlots removes every passphrase-type slot.
+	DropPassSlots bool
+	// DropIdentities removes every X-Wing slot that opens under one of
+	// these keys, including the identity that unlocked the file.
+	DropIdentities []*xwing.PrivateKey
+	// DropPassphrases removes every passphrase slot that opens under one of
+	// these passphrases.
+	DropPassphrases [][]byte
+
+	// Add appends new slots after the kept ones.
+	Add SealOptions
+}
+
+// RewrapEdit rewrites the key slots of a sealed file incrementally,
+// preserving unmentioned slots instead of replacing the whole set. It
+// shares Rewrap's fast-mode caveat: the file key and payload bytes carry
+// over, so a removed recipient who kept a copy of the old file is not
+// revoked. On a v1 file the single implicit slot cannot be carried
+// verbatim; KeepAll instead re-creates the opening credential as a v2 slot,
+// upgrading the file in place.
+func RewrapEdit(dst io.Writer, src io.Reader, identity *xwing.PrivateKey, passphrase []byte, edit SlotEdit) error {
+	hasDrop := len(edit.DropSlots) > 0 || edit.DropPassSlots ||
+		len(edit.DropIdentities) > 0 || len(edit.DropPassphrases) > 0
+	if hasDrop && !edit.KeepAll {
+		return errors.New("sindook: drop selectors have no effect without KeepAll")
+	}
+	if !edit.KeepAll {
+		return Rewrap(dst, src, identity, passphrase, edit.Add, false)
+	}
+
+	br := bufio.NewReaderSize(src, chunkSize+chacha20poly1305.Overhead)
+	fileKey, fileNonce, hdr, err := unlock(br, identity, passphrase)
+	if err != nil {
+		return err
+	}
+	defer memguard.Wipe(fileKey)
+
+	matchedIDs := make([]bool, len(edit.DropIdentities))
+	matchedPass := make([]bool, len(edit.DropPassphrases))
+	matchedPassType := false
+
+	var kept []parsedSlot
+	add := edit.Add
+	if hdr.version == 1 {
+		// A v1 file holds one implicit slot bound to the credential that
+		// opened it, so a credential selector matches only when it is that
+		// same credential.
+		dropped := false
+		for _, n := range edit.DropSlots {
+			if n != 1 {
+				return fmt.Errorf("sindook: no slot %d, the file has 1 slot", n)
+			}
+			dropped = true
+		}
+		switch hdr.mode {
+		case modeV1Recipient:
+			for j, d := range edit.DropIdentities {
+				if bytes.Equal(d.PublicKey(), identity.PublicKey()) {
+					matchedIDs[j] = true
+					dropped = true
+				}
+			}
+		case modeV1Passphrase:
+			if edit.DropPassSlots {
+				matchedPassType = true
+				dropped = true
+			}
+			for j, q := range edit.DropPassphrases {
+				if bytes.Equal(q, passphrase) {
+					matchedPass[j] = true
+					dropped = true
+				}
+			}
+		}
+		if !dropped {
+			switch hdr.mode {
+			case modeV1Recipient:
+				add.Recipients = append([][]byte{identity.PublicKey()}, add.Recipients...)
+			case modeV1Passphrase:
+				add.Passphrases = append([][]byte{passphrase}, add.Passphrases...)
+			}
+		}
+	} else {
+		dropIndex := make(map[int]bool, len(edit.DropSlots))
+		for _, n := range edit.DropSlots {
+			if n < 1 || n > len(hdr.slots) {
+				return fmt.Errorf("sindook: no slot %d, the file has %d slots", n, len(hdr.slots))
+			}
+			dropIndex[n] = true
+		}
+		for i, s := range hdr.slots {
+			drop := dropIndex[i+1]
+			switch s.slotType {
+			case SlotXWing:
+				for j, d := range edit.DropIdentities {
+					fk, err := trySlotXWing(s, fileNonce, d)
+					if err != nil {
+						return err
+					}
+					if fk != nil {
+						memguard.Wipe(fk)
+						matchedIDs[j] = true
+						drop = true
+					}
+				}
+			case SlotPassphrase:
+				if edit.DropPassSlots {
+					matchedPassType = true
+					drop = true
+				}
+				for j, q := range edit.DropPassphrases {
+					if fk := trySlotPass(s, fileNonce, q); fk != nil {
+						memguard.Wipe(fk)
+						matchedPass[j] = true
+						drop = true
+					}
+				}
+			}
+			if !drop {
+				kept = append(kept, s)
+			}
+		}
+	}
+	if edit.DropPassSlots && !matchedPassType {
+		return errors.New("sindook: no passphrase slot to drop")
+	}
+	for j := range matchedIDs {
+		if !matchedIDs[j] {
+			return fmt.Errorf("sindook: no slot opens under drop identity %d", j+1)
+		}
+	}
+	for j := range matchedPass {
+		if !matchedPass[j] {
+			return fmt.Errorf("sindook: no slot opens under drop passphrase %d", j+1)
+		}
+	}
+
+	if len(add.Passphrases) > 0 && add.Argon == (Argon2idParams{}) {
+		add.Argon = DefaultArgon2id
+	}
+	if len(add.Recipients)+len(add.Passphrases) > 0 {
+		if err := add.validate(); err != nil {
+			return err
+		}
+	}
+	passCount := len(add.Passphrases)
+	for _, s := range kept {
+		if s.slotType == SlotPassphrase {
+			passCount++
+		}
+	}
+	total := len(kept) + len(add.Recipients) + len(add.Passphrases)
+	if total == 0 {
+		return errors.New("sindook: rewrap would leave the file with no key slots")
+	}
+	if total > maxSlots {
+		return fmt.Errorf("sindook: rewrap would leave %d key slots, at most %d allowed", total, maxSlots)
+	}
+	if passCount > maxPassSlots {
+		return fmt.Errorf("sindook: rewrap would leave %d passphrase slots, at most %d allowed", passCount, maxPassSlots)
+	}
+	if err := writeHeaderV2(dst, fileKey, fileNonce, kept, add); err != nil {
+		return err
+	}
+	_, err = io.Copy(dst, br)
 	return err
 }
 
