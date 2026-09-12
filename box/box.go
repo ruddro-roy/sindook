@@ -598,8 +598,8 @@ func Rewrap(dst io.Writer, src io.Reader, identity *xwing.PrivateKey, passphrase
 
 // SlotEdit describes an incremental rewrite of a sealed file's key slots:
 // which existing slots survive, which are removed, and which are appended.
-// Kept slots are copied verbatim — a slot's wrap is bound to the file nonce
-// and to its own public parameters, and both travel inside the slot — so a
+// Kept slots are copied verbatim. A slot's wrap is bound to the file nonce
+// and to its own public parameters, and both travel inside the slot, so a
 // kept slot stays valid without knowing its secret. The payload is carried
 // over unchanged, making every edit a fast-mode rewrap; rotating the file
 // key needs Rewrap with deep=true, which discards every slot.

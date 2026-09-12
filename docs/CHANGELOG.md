@@ -10,7 +10,7 @@ clear entry here, as described in [docs/COMPATIBILITY.md](COMPATIBILITY.md).
 ### Added
 
 - `sindook rewrap` gains incremental slot edits. `-keep` preserves the
-  existing slots — passphrase slots included, without re-entering them —
+  existing slots, passphrase slots included, without re-entering them,
   while `-r`/`-R`/`-new-*` append new ones, and the drop flags remove
   matching slots: `-drop-slot N` (the numbering `inspect` prints),
   `-drop-i IDENTITY`, `-drop-p`, `-drop-passfile FILE` (every slot that
@@ -24,6 +24,11 @@ clear entry here, as described in [docs/COMPATIBILITY.md](COMPATIBILITY.md).
   carried verbatim (a wrap is bound to the file nonce and the slot's own
   public parameters) and the payload is copied untouched, so every edit is
   a fast-mode rewrap with the same revocation caveat.
+- `docs/DESIGN_RATIONALE.md` records which format v2 decisions follow the
+  published literature and which are project choices, with primary
+  sources. The docs also state the slot-role boundary explicitly:
+  recipient slots are the access-control layer, passphrase slots are for
+  local unlock, escrow, and recovery.
 
 ## [v0.11.1] - 2026-08-31
 

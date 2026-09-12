@@ -10,7 +10,7 @@
 
 ## Key slots and rotation
 
-Format v2 uses the LUKS keyslot model: one random file key, wrapped once per recipient or passphrase. The rewrap command replaces the slot set. Two honest properties to understand:
+Format v2 uses the LUKS keyslot model: one random file key, wrapped once per recipient or passphrase. The two slot types have different jobs. Recipient slots are the access-control layer; passphrase slots exist for local unlock, escrow, and recovery. The rewrap command replaces the slot set. Two honest properties to understand:
 
 - Fast rewrap rotates access without decrypting or re-encrypting the payload or materializing payload plaintext. It still copies ciphertext to a replacement file. It is the right tool for adding people, algorithm migration, and format upgrades.
 - Fast rewrap is not revocation. A removed recipient who kept a copy of the old file still knows the file key. Deep rewrap re-encrypts the replacement payload under a fresh key, so a removed recipient cannot use an old slot to open the replacement. It cannot invalidate copies already held by that recipient.

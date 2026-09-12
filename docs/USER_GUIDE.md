@@ -210,6 +210,12 @@ A passphrase can be combined with recipients as a recovery path:
 sindook seal -r personal.key.pub -p archive.tar
 ```
 
+Keep passphrase slots in that role: local unlock, escrow, and recovery.
+Ongoing access for other people belongs in recipient slots, because
+anyone who learns a passphrase can open every file that carries a
+matching slot, and a passphrase-only file does not get the hybrid
+construction's post-quantum protection.
+
 A `-passfile` reads only the first line of a file. On POSIX systems, keep that file readable only by its owner, for example with `chmod 600 recovery.pass`. On Windows, restrict the file with an appropriate ACL.
 
 ## Check a backup before you need it

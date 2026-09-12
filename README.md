@@ -271,11 +271,14 @@ can ship without breaking old readers. Payloads are sealed in 64 KiB
 ChaCha20-Poly1305 chunks with the counter and a final-chunk flag bound
 into the nonce, so truncation, reordering, and extension all fail
 authentication. Passphrase slots use Argon2id with RFC 9106 parameters,
-capped on read so hostile files cannot demand unbounded work.
+capped on read so hostile files cannot demand unbounded work; they are
+the local-unlock, escrow, and recovery path, while recipient slots are
+the access-control layer.
 
 Byte-level layout: [docs/FORMAT.md](docs/FORMAT.md). Security design and
 rotation semantics: [docs/SECURITY.md](docs/SECURITY.md). Threat-model
-boundaries: [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md).
+boundaries: [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md). Literature
+basis and design choices: [docs/DESIGN_RATIONALE.md](docs/DESIGN_RATIONALE.md).
 
 Known limitations: fast `rewrap` is not retroactive revocation; `shred`
 cannot defeat SSD wear leveling or copies an attacker already made; memory
@@ -301,7 +304,7 @@ X-Wing implementation.
 - [User guide](docs/USER_GUIDE.md)
 - [Threat model](docs/THREAT_MODEL.md)
 - [Security model](docs/SECURITY.md) and [security reporting policy](SECURITY.md)
-- [Format specification](docs/FORMAT.md) and [compatibility promise](docs/COMPATIBILITY.md)
+- [Format specification](docs/FORMAT.md), [compatibility promise](docs/COMPATIBILITY.md), and [design rationale](docs/DESIGN_RATIONALE.md)
 - [Release process](docs/RELEASING.md)
 - [Changelog](docs/CHANGELOG.md) and [v1 readiness](docs/V1_READINESS.md)
 - [Contributing](CONTRIBUTING.md)
