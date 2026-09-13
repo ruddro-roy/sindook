@@ -144,6 +144,14 @@ jobs:
             exit 1
           fi
           bash scripts/check-version-consistency.sh
+      - name: fuzz target registration
+        timeout-minutes: 2
+        run: |
+          # scripts/check-fuzz-targets.sh verifies every Fuzz function in
+          # *_test.go has a compile line in both build scripts, so a new
+          # target cannot reach the nightly ClusterFuzzLite build
+          # unregistered (which used to fail the run a day late).
+          bash scripts/check-fuzz-targets.sh
       - name: cross-compile
         timeout-minutes: 5
         run: |

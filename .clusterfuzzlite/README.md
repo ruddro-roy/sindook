@@ -41,8 +41,10 @@ package's `fuzz_test.go`, then add one `compile_native_go_fuzzer_v2
 github.com/ruddro-roy/sindook/<pkg> FuzzXxx fuzz_<unique_name>` line to
 `build.sh` (in both this copy and `oss-fuzz/build.sh`). The guards at the
 bottom fail the build if a declared function is missing from the script or
-a compile line produced no binary. Output names may contain only
-alphanumerics, `_`, and `-`.
+a compile line produced no binary; `scripts/check-fuzz-targets.sh` runs
+the same registration check in the `ci` quality job, so a missing line
+fails on the push rather than in the nightly build. Output names may
+contain only alphanumerics, `_`, and `-`.
 
 ## Building and running locally
 

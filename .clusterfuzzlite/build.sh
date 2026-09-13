@@ -12,6 +12,7 @@ compile_native_go_fuzzer_v2 github.com/ruddro-roy/sindook/box FuzzOpen fuzz_box_
 compile_native_go_fuzzer_v2 github.com/ruddro-roy/sindook/box FuzzRewrap fuzz_box_rewrap
 compile_native_go_fuzzer_v2 github.com/ruddro-roy/sindook/box FuzzRewrapRoundTrip fuzz_box_rewrap_round_trip
 compile_native_go_fuzzer_v2 github.com/ruddro-roy/sindook/box FuzzInspect fuzz_box_inspect
+compile_native_go_fuzzer_v2 github.com/ruddro-roy/sindook/box FuzzRewrapEdit fuzz_box_rewrap_edit
 compile_native_go_fuzzer_v2 github.com/ruddro-roy/sindook/internal/armor FuzzArmor fuzz_armor
 compile_native_go_fuzzer_v2 github.com/ruddro-roy/sindook/internal/armor FuzzArmorReader fuzz_armor_reader
 compile_native_go_fuzzer_v2 github.com/ruddro-roy/sindook/internal/armor FuzzIsArmored fuzz_is_armored

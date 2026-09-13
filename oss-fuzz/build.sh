@@ -27,6 +27,7 @@ compile_native_go_fuzzer_v2 github.com/ruddro-roy/sindook/box FuzzOpen fuzz_box_
 compile_native_go_fuzzer_v2 github.com/ruddro-roy/sindook/box FuzzRewrap fuzz_box_rewrap
 compile_native_go_fuzzer_v2 github.com/ruddro-roy/sindook/box FuzzRewrapRoundTrip fuzz_box_rewrap_round_trip
 compile_native_go_fuzzer_v2 github.com/ruddro-roy/sindook/box FuzzInspect fuzz_box_inspect
+compile_native_go_fuzzer_v2 github.com/ruddro-roy/sindook/box FuzzRewrapEdit fuzz_box_rewrap_edit
 compile_native_go_fuzzer_v2 github.com/ruddro-roy/sindook/internal/armor FuzzArmor fuzz_armor
 compile_native_go_fuzzer_v2 github.com/ruddro-roy/sindook/internal/armor FuzzArmorReader fuzz_armor_reader
 compile_native_go_fuzzer_v2 github.com/ruddro-roy/sindook/internal/armor FuzzIsArmored fuzz_is_armored
@@ -34,6 +35,7 @@ compile_native_go_fuzzer_v2 github.com/ruddro-roy/sindook/xwing FuzzDecapsulate 
 compile_native_go_fuzzer_v2 github.com/ruddro-roy/sindook/xwing FuzzEncapsulate fuzz_xwing_encapsulate
 compile_native_go_fuzzer_v2 github.com/ruddro-roy/sindook/xwing FuzzNewPrivateKey fuzz_xwing_new_private_key
 compile_native_go_fuzzer_v2 github.com/ruddro-roy/sindook/xwing FuzzDecapsulateRandomIdentity fuzz_xwing_decapsulate_random_identity
+compile_native_go_fuzzer_v2 github.com/ruddro-roy/sindook/internal/baseline FuzzParseBaseline fuzz_baseline_parse
 
 # Guards, so a fuzz target can never go missing silently again:
 # 1. every Fuzz function declared in the repository's test files must be
