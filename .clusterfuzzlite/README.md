@@ -26,7 +26,7 @@ single empty marker commit).
   as a substring), which is why `FuzzArmor` and `FuzzDecapsulate` went
   unbuilt until 2026-08; the `_v2` wrapper matches `func Name(` exactly and
   exits nonzero on ambiguity. The `go-118-fuzz-build` shim is pinned to
-  commit `fc5dc53b9db8` in two places — the `go get` in `build.sh` and the
+  commit `fc5dc53b9db8a38c394c53d6e439a1410cf8fc19` in two places — the `go get` in `build.sh` and the
   binary rebuild in the `Dockerfile` (the image ships a Go-1.25 build that
   cannot process go1.26 sources) — keep the two pins, the Go tarball
   SHA-256, and the Go version in `go.mod` in sync when bumping any of

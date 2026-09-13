@@ -171,19 +171,24 @@ prepare_winget_dir() {
 # ---------------------------------------------------------------- Homebrew
 formula="$repo_dir/packaging/homebrew/sindook.rb"
 [ -f "$formula" ] || die "missing $formula"
-grep -q '^[[:space:]]*version "' "$formula" || die "$formula: no version line"
 grep -q 'sha256 "' "$formula" || die "$formula: no sha256 lines"
+old_formula_version=$(sed -n 's/.*releases\/download\/v\([0-9][0-9.]*\)\/sindook_[0-9][0-9.]*_.*/\1/p' "$formula" | head -n 1)
+[ -n "$old_formula_version" ] || die "$formula: could not derive version from release URLs"
+if [ "$old_formula_version" != "$version" ]; then
+	sed -e "s/v${old_formula_version}/v${version}/g" \
+		-e "s/sindook_${old_formula_version}_/sindook_${version}_/g" \
+		"$formula" > "$formula.tmp" || die "sed failed on $formula"
+	mv "$formula.tmp" "$formula"
+fi
 
 for pair in "darwin_amd64" "darwin_arm64" "linux_amd64" "linux_arm64"; do
 	arch=$pair
 	h=$(lookup_hash "sindook_${version}_${arch}.tar.gz")
-	ctx="sindook_#{version}_${arch}\.tar\.gz"
+	ctx="sindook_${version}_${arch}\.tar\.gz"
 	require_next "$formula" "$ctx" 'sha256 "'
 	replace_after "$ctx" "$formula" \
 		's/sha256 "[0-9a-fA-F]\{64\}"/sha256 "'"$h"'"/'
 done
-sed -e 's/^\([[:space:]]*version "\)[^"]*/\1'"$version"'/' "$formula" > "$formula.tmp" &&
-	mv "$formula.tmp" "$formula"
 
 # -------------------------------------------------------------------- Scoop
 manifest="$repo_dir/packaging/scoop/sindook.json"
@@ -252,8 +257,13 @@ if grep -q '^[[:space:]]*ReleaseDate: 1970-01-01' "$ifile"; then
 	if [ -n "${SINDOOK_RELEASE_DATE:-}" ]; then
 		release_date="$SINDOOK_RELEASE_DATE"
 	else
-		# Try to obtain authoritative UTC date from GitHub release info
-		release_date=$(curl -fsSL --retry 2 "https://api.github.com/repos/$repo/releases/tags/v$version" 2>/dev/null | python3 -c 'import sys, json; d=json.load(sys.stdin); print(d.get("published_at", "").split("T")[0])' 2>/dev/null || echo "1970-01-01")
+		api_json=$(mktemp "${TMPDIR:-/tmp}/sindook-release-api.XXXXXX")
+		if curl -fsSL --retry 2 -o "$api_json" "https://api.github.com/repos/$repo/releases/tags/v$version"; then
+			release_date=$(python3 -c 'import sys, json; d=json.load(open(sys.argv[1])); print(d.get("published_at", "").split("T")[0])' "$api_json" 2>/dev/null || echo "1970-01-01")
+		else
+			release_date="1970-01-01"
+		fi
+		rm -f "$api_json"
 	fi
 	if [ "$release_date" = "1970-01-01" ] || ! printf '%s' "$release_date" | grep -Eq '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'; then
 		die "ReleaseDate must be a valid YYYY-MM-DD (set SINDOOK_RELEASE_DATE explicitly for pre-release testing)"
@@ -285,7 +295,12 @@ grep -q "sha256 \"$(lookup_hash "sindook_${version}_linux_amd64.tar.gz")\"" "$fo
 	die "$formula: linux_amd64 hash was not written"
 grep -q "sha256 \"$(lookup_hash "sindook_${version}_linux_arm64.tar.gz")\"" "$formula" ||
 	die "$formula: linux_arm64 hash was not written"
-grep -q "version \"$version\"" "$formula" || die "$formula: version was not written"
+if grep -q "releases/download/v${version}/sindook_${version}_darwin_amd64\.tar\.gz" "$formula"; then
+	grep -q "releases/download/v${version}/sindook_${version}_darwin_amd64\.tar\.gz" "$formula" ||
+		die "$formula: versioned URL was not written"
+else
+	die "$formula: version is not derivable from the URL"
+fi
 
 grep -q '"version": "'"$version"'"' "$manifest" || die "$manifest: version was not written"
 grep -q '"sha256:'"$h64"'"' "$manifest" || die "$manifest: amd64 hash was not written"

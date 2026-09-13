@@ -92,54 +92,85 @@ func FuzzOpenRecipient(f *testing.F) {
 	})
 }
 
-// maxFuzzArgonWork caps declared Time*MemoryKiB per passphrase slot. The
-// parser's own ceiling (maxArgonTime, maxArgonMemoryKiB) is deliberately
-// generous so files sealed with strong parameters stay openable, but a
-// hostile header near that ceiling costs seconds of KDF work before
-// rejection, which would stall the fuzzer. Default parameters fit under
-// this budget, so both golden fixtures still fuzz the full path.
+// maxFuzzArgonWork caps the Argon2id work a fuzz input may make unlock
+// perform: passes times memory KiB, summed over every passphrase slot the
+// parser would actually run. The parser's own ceiling (maxArgonTime,
+// maxArgonMemoryKiB) is deliberately generous so files sealed with strong
+// parameters stay openable, but a hostile header near that ceiling costs
+// seconds of KDF work per slot before rejection, which stalls the fuzzer
+// and reads as a hang under libFuzzer's per-input timeout. Default
+// parameters fit under this budget, so both golden fixtures still fuzz the
+// full path.
 const maxFuzzArgonWork = 4 * 64 * 1024
 
-// argonWorkBounded reads just enough of a candidate header to find declared
-// Argon2id parameters. Truncated or malformed inputs return true: the real
-// parser rejects those before any KDF runs.
+// argonWorkBounded reports whether the KDF work a candidate header can make
+// unlock perform stays within maxFuzzArgonWork. It mirrors the parser's
+// free rejections so that only inputs which would really reach argon2 are
+// skipped: a truncated or malformed header, a passphrase slot body of the
+// wrong length, and parameters that fail validate() all cost nothing and
+// do not count. Work is summed across slots because a wrong passphrase is
+// tried against every passphrase slot in turn.
 func argonWorkBounded(data []byte) bool {
+	var params []Argon2idParams
 	if len(data) < len(magicV2)+1 {
 		return true
 	}
 	switch string(data[:len(magicV2)]) {
 	case magicV1:
-		if data[8] != modeV1Passphrase || len(data) < 17 {
+		// magic (8), mode (1), passes (4), memory (4), lanes (1), salt,
+		// nonce: unlockV1 reads the whole fixed header before deriving.
+		if data[8] != modeV1Passphrase || len(data) < len(magicV1)+1+9+saltSize+fileNonceSize {
 			return true
 		}
-		work := uint64(binary.BigEndian.Uint32(data[9:13])) * uint64(binary.BigEndian.Uint32(data[13:17]))
-		return work <= maxFuzzArgonWork
+		params = append(params, Argon2idParams{
+			Time:      binary.BigEndian.Uint32(data[9:13]),
+			MemoryKiB: binary.BigEndian.Uint32(data[13:17]),
+			Threads:   data[17],
+		})
 	case magicV2:
-		if len(data) < 25 {
+		if len(data) < len(magicV2)+fileNonceSize+1 {
 			return true
 		}
-		count := int(data[24])
-		if count > maxSlots {
+		count := int(data[len(magicV2)+fileNonceSize])
+		if count < 1 || count > maxSlots {
 			return true
 		}
-		off := 25
+		off := len(magicV2) + fileNonceSize + 1
 		for i := 0; i < count; i++ {
 			if off+3 > len(data) {
 				return true
 			}
 			bodyLen := int(binary.BigEndian.Uint16(data[off+1 : off+3]))
 			body := data[off+3:]
-			if bodyLen > len(body) {
+			if bodyLen > maxSlotBody || bodyLen > len(body) {
 				return true
 			}
-			if data[off] == SlotPassphrase && bodyLen >= 8 {
-				work := uint64(binary.BigEndian.Uint32(body[0:4])) * uint64(binary.BigEndian.Uint32(body[4:8]))
-				if work > maxFuzzArgonWork {
-					return false
-				}
+			if data[off] == SlotPassphrase && bodyLen == passSlotBody {
+				params = append(params, Argon2idParams{
+					Time:      binary.BigEndian.Uint32(body[0:4]),
+					MemoryKiB: binary.BigEndian.Uint32(body[4:8]),
+					Threads:   body[8],
+				})
 			}
 			off += 3 + bodyLen
 		}
+		// unlockV2 reads the header MAC before trying any slot.
+		if off+macSize > len(data) {
+			return true
+		}
+	default:
+		return true
+	}
+	var total uint64
+	for _, p := range params {
+		if p.validate() != nil {
+			continue // rejected before any KDF runs
+		}
+		work := uint64(p.Time) * uint64(p.MemoryKiB)
+		if work > maxFuzzArgonWork || total > maxFuzzArgonWork-work {
+			return false
+		}
+		total += work
 	}
 	return true
 }
@@ -574,12 +605,23 @@ func FuzzInspect(f *testing.F) {
 		if ps < -1 || ps > payloadLen {
 			t.Fatalf("PlaintextSize(%d)=%d out of range", payloadLen, ps)
 		}
-		// If the data is actually a valid sealed file (Open succeeds with one of our creds),
-		// then PlaintextSize should match the true plaintext length and header sizes must line up.
-		for _, cred := range []struct {
+		// If the data is actually a valid sealed file (Open succeeds with one
+		// of our creds), PlaintextSize must match the true plaintext length
+		// and the header size must be stable. The identity attempt costs one
+		// decapsulation; the passphrase attempts run Argon2id against every
+		// in-cap passphrase slot, so they are gated on the same declared-work
+		// budget as the other targets in this file. A hostile-but-valid
+		// header still reaches every Inspect assertion above; only its KDF
+		// is skipped.
+		type credential struct {
 			id   *xwing.PrivateKey
 			pass []byte
-		}{{id: id}, {pass: []byte("inspect")}, {id: id, pass: []byte("inspect")}} {
+		}
+		creds := []credential{{id: id}}
+		if argonWorkBounded(data) {
+			creds = append(creds, credential{pass: []byte("inspect")}, credential{id: id, pass: []byte("inspect")})
+		}
+		for _, cred := range creds {
 			var out bytes.Buffer
 			if err := Open(&out, bytes.NewReader(data), cred.id, cred.pass); err == nil {
 				if ps != int64(len(out.Bytes())) {

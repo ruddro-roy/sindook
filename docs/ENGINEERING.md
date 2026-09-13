@@ -36,7 +36,7 @@ tamper check after a fresh install
 
 ## Fuzzing
 
-Sixteen Go fuzz targets cover the box format, ASCII armor, the X-Wing
+Seventeen Go fuzz targets cover the box format, ASCII armor, the X-Wing
 implementation, and baseline-record parsing
 ([box/fuzz_test.go](../box/fuzz_test.go),
 [internal/armor/fuzz_test.go](../internal/armor/fuzz_test.go),
@@ -54,7 +54,10 @@ prunes stale corpus entries
 ([.github/workflows/cflite_batch.yml](../.github/workflows/cflite_batch.yml)).
 Pull requests that touch Go code get a shorter fuzzing pass with SARIF
 results ([.github/workflows/cflite_pr.yml](../.github/workflows/cflite_pr.yml)).
-Every CI run smoke-tests a subset of the targets.
+The batch workflow serializes runs that share the `corpora` branch,
+preflights push access before fuzzing, retries only infra failures that
+saved no crash artifact, and uploads crash SARIF when a real finding is
+present. Every CI run smoke-tests a subset of the targets.
 
 ## The concurrency contract
 

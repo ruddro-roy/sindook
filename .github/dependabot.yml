@@ -9,14 +9,21 @@ updates:
         patterns:
           - "*"
   - package-ecosystem: gomod
-    directory: /
+    directories:
+      - /
+      - /interop
     schedule:
       interval: weekly
-  - package-ecosystem: gomod
-    directory: /interop
-    schedule:
-      interval: weekly
+    groups:
+      golang-x:
+        patterns:
+          - "golang.org/x/*"
+        group-by: dependency-name
   - package-ecosystem: docker
     directory: /
     schedule:
       interval: weekly
+    ignore:
+      # Go toolchain bumps must be coordinated with go.mod and the fuzz
+      # Dockerfiles; scripts/check-fuzz-build.sh enforces that manually.
+      - dependency-name: "golang"

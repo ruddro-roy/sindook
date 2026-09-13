@@ -16,25 +16,24 @@
 class Sindook < Formula
   desc "Hybrid post-quantum file encryption (X-Wing: X25519 + ML-KEM-768)"
   homepage "https://github.com/ruddro-roy/sindook"
-  version "0.11.1"
   license "Apache-2.0"
 
   on_macos do
     if Hardware::CPU.intel?
-      url "https://github.com/ruddro-roy/sindook/releases/download/v#{version}/sindook_#{version}_darwin_amd64.tar.gz"
+      url "https://github.com/ruddro-roy/sindook/releases/download/v0.11.1/sindook_0.11.1_darwin_amd64.tar.gz"
       sha256 "eece5a1d904e1ced7672db1feba8bf9fc6612f6eab2208fc6a0387ed160a5c6d"
     else
-      url "https://github.com/ruddro-roy/sindook/releases/download/v#{version}/sindook_#{version}_darwin_arm64.tar.gz"
+      url "https://github.com/ruddro-roy/sindook/releases/download/v0.11.1/sindook_0.11.1_darwin_arm64.tar.gz"
       sha256 "5cfe50867d7c1ca989f715dd3fcc69da73b5d9678c4e9b628778453562084eee"
     end
   end
 
   on_linux do
     if Hardware::CPU.intel?
-      url "https://github.com/ruddro-roy/sindook/releases/download/v#{version}/sindook_#{version}_linux_amd64.tar.gz"
+      url "https://github.com/ruddro-roy/sindook/releases/download/v0.11.1/sindook_0.11.1_linux_amd64.tar.gz"
       sha256 "5bfc61f80bc50185896c122f6765b8aedef96335b444149dcfbb4d90cf3ea2ad"
     else
-      url "https://github.com/ruddro-roy/sindook/releases/download/v#{version}/sindook_#{version}_linux_arm64.tar.gz"
+      url "https://github.com/ruddro-roy/sindook/releases/download/v0.11.1/sindook_0.11.1_linux_arm64.tar.gz"
       sha256 "d9a46b05b32efc89280b74fd678f98d07c3ff44c35f8df90566b4de8e69cd2d5"
     end
   end

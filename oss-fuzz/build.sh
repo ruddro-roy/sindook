@@ -14,7 +14,7 @@
 # limitations under the License.
 #
 ################################################################################
-go get github.com/AdamKorcz/go-118-fuzz-build/testing@fc5dc53b9db8
+go get github.com/AdamKorcz/go-118-fuzz-build/testing@fc5dc53b9db8a38c394c53d6e439a1410cf8fc19
 # compile_native_go_fuzzer (legacy) silently skips a target whose name is a
 # prefix of another fuzz function in the same package, because it greps
 # "func Name" as a substring. The _v2 wrapper matches "func Name(" exactly

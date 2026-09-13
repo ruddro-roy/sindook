@@ -1,17 +1,21 @@
 name: ClusterFuzzLite PR fuzzing
+
 on:
   pull_request:
-    paths:
-      - '**.go'
-      - 'go.mod'
-      - 'go.sum'
-      - '.clusterfuzzlite/**'
+
 permissions:
   contents: read
-  security-events: write
+
+concurrency:
+  group: cflite-pr-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   pr-fuzzing:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
     steps:
       - name: Build fuzzers
         id: build
@@ -28,3 +32,17 @@ jobs:
           mode: code-change
           sanitizer: address
           output-sarif: true
+      - name: Upload crash artifacts
+        if: always() && steps.build.outcome == 'success' && hashFiles('out/artifacts/**') != ''
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: cflite-pr-crashes
+          path: out/artifacts
+          retention-days: 14
+          if-no-files-found: ignore
+      - name: Upload SARIF
+        if: always() && steps.build.outcome == 'success' && hashFiles('cifuzz-sarif/results.sarif') != ''
+        uses: github/codeql-action/upload-sarif@e58424170fb0262c8d7ed60a2e84b9bffe205c67 # codeql-bundle-v2.26.1
+        with:
+          sarif_file: cifuzz-sarif/results.sarif
+          checkout_path: cifuzz-sarif
