@@ -30,7 +30,7 @@ single empty marker commit).
   binary rebuild in the `Dockerfile` (the image ships a Go-1.25 build that
   cannot process go1.26 sources) — keep the two pins, the Go tarball
   SHA-256, and the Go version in `go.mod` in sync when bumping any of
-  them. `build.sh` ends with two automatic guards: every `Fuzz` function
+  them; `scripts/check-fuzz-build.sh` enforces that agreement in ci. `build.sh` ends with two automatic guards: every `Fuzz` function
   declared in the repository's `*_test.go` files must have a compile line
   in the script, and every compile line must have produced its binary in
   `$OUT` — a fuzz target can never go missing silently again.
@@ -41,7 +41,7 @@ package's `fuzz_test.go`, then add one `compile_native_go_fuzzer_v2
 github.com/ruddro-roy/sindook/<pkg> FuzzXxx fuzz_<unique_name>` line to
 `build.sh` (in both this copy and `oss-fuzz/build.sh`). The guards at the
 bottom fail the build if a declared function is missing from the script or
-a compile line produced no binary; `scripts/check-fuzz-targets.sh` runs
+a compile line produced no binary; `scripts/check-fuzz-build.sh` runs
 the same registration check in the `ci` quality job, so a missing line
 fails on the push rather than in the nightly build. Output names may
 contain only alphanumerics, `_`, and `-`.

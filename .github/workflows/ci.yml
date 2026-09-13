@@ -144,14 +144,15 @@ jobs:
             exit 1
           fi
           bash scripts/check-version-consistency.sh
-      - name: fuzz target registration
+      - name: fuzz build consistency
         timeout-minutes: 2
         run: |
-          # scripts/check-fuzz-targets.sh verifies every Fuzz function in
-          # *_test.go has a compile line in both build scripts, so a new
-          # target cannot reach the nightly ClusterFuzzLite build
-          # unregistered (which used to fail the run a day late).
-          bash scripts/check-fuzz-targets.sh
+          # scripts/check-fuzz-build.sh verifies every Fuzz function in
+          # *_test.go has a compile line in both build scripts and that
+          # the Dockerfiles' Go/shim pins match go.mod, so a new target
+          # or a toolchain bump cannot reach the nightly ClusterFuzzLite
+          # build broken (which used to fail the run a day late).
+          bash scripts/check-fuzz-build.sh
       - name: cross-compile
         timeout-minutes: 5
         run: |

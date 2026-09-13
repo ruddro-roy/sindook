@@ -41,7 +41,7 @@ encapsulation, key generation, and decapsulation against random
 identities); and the baseline record parser. The list
 is kept complete automatically: guards in both build scripts fail the
 build if a declared `Fuzz` function has no compile line, or if a
-compile line produces no binary, and `scripts/check-fuzz-targets.sh`
+compile line produces no binary, and `scripts/check-fuzz-build.sh`
 runs the same registration check in the `ci` workflow's quality job so
 a missing line fails on the push instead of in the nightly build.
 

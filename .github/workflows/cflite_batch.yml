@@ -30,6 +30,26 @@ jobs:
           output-sarif: true
           storage-repo: https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/ruddro-roy/sindook.git
           storage-repo-branch: corpora
+      # Same transient coverage as the prune job below: corpus sync
+      # hiccups and disk pressure die inside the action and cost a
+      # nightly failure email. run_fuzzers refuses to start if
+      # out/artifacts has files from the first attempt, so clear that
+      # directory before retrying. A real crash fails both attempts
+      # deterministically, so the retry only absorbs infra flakes.
+      - name: Reset run artifacts
+        if: failure()
+        run: rm -rf "${GITHUB_WORKSPACE}/out/artifacts"
+      - name: Run fuzzers (retry)
+        if: failure()
+        uses: google/clusterfuzzlite/actions/run_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1 # v1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          fuzz-seconds: 1800
+          mode: batch
+          sanitizer: address
+          output-sarif: true
+          storage-repo: https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/ruddro-roy/sindook.git
+          storage-repo-branch: corpora
       # The run_fuzzers action logs corpus upload errors but still exits 0,
       # which once let every batch run silently lose its discoveries. Fail
       # the workflow unless the corpus branch actually advanced.
