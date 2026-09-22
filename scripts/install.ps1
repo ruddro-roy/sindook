@@ -22,24 +22,92 @@ Set-StrictMode -Version 2.0
 # older protocols. Add Tls12 (and higher) without removing anything else.
 [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 
+$userAgent = 'sindook-installer'
+
+# Retries a few times so a transient network blip does not fail an install,
+# matching `curl --retry 3` in install.sh.
+function Invoke-SindookRequest {
+    param(
+        [Parameter(Mandatory = $true)][string]$Uri,
+        [string]$OutFile,
+        [string]$Method = 'Get'
+    )
+    $attempt = 0
+    while ($true) {
+        $attempt++
+        try {
+            $params = @{
+                Uri             = $Uri
+                Method          = $Method
+                UseBasicParsing = $true
+                Headers         = @{ 'User-Agent' = $userAgent }
+            }
+            if ($OutFile) { $params['OutFile'] = $OutFile }
+            return Invoke-WebRequest @params
+        } catch {
+            if ($attempt -ge 3) { throw }
+            Start-Sleep -Seconds $attempt
+        }
+    }
+}
+
+# Resolves the newest release tag by following the github.com redirect rather
+# than querying api.github.com. The REST API allows only 60 unauthenticated
+# calls per hour per source IP, which shared egress addresses (CI runners,
+# corporate NAT, CGNAT) exhaust routinely; the redirect carries no such budget.
+# The API stays as a fallback for when the redirect target cannot be read.
+function Get-SindookLatestTag {
+    param([Parameter(Mandatory = $true)][string]$Repo)
+
+    try {
+        $response = Invoke-SindookRequest -Uri "https://github.com/$Repo/releases/latest" -Method 'Head'
+        $final = $null
+        $base = $response.BaseResponse
+        if ($null -ne $base) {
+            # Windows PowerShell 5.1 exposes HttpWebResponse.ResponseUri;
+            # PowerShell 6+ exposes HttpResponseMessage.RequestMessage.
+            if ($base.PSObject.Properties['ResponseUri'] -and $base.ResponseUri) {
+                $final = [string]$base.ResponseUri
+            } elseif ($base.PSObject.Properties['RequestMessage'] -and $base.RequestMessage) {
+                $final = [string]$base.RequestMessage.RequestUri
+            }
+        }
+        if ($final) {
+            $candidate = $final.TrimEnd('/').Split('/')[-1]
+            if ($candidate -match '^v[0-9]') { return $candidate }
+        }
+    } catch {
+        Write-Verbose "Sindook installer: release redirect lookup failed: $($_.Exception.Message)"
+    }
+
+    $release = Invoke-RestMethod -Headers @{ 'User-Agent' = $userAgent } `
+        -Uri "https://api.github.com/repos/$Repo/releases/latest"
+    if (-not $release.tag_name) {
+        throw "Sindook installer: could not determine the latest release of $Repo."
+    }
+    return [string]$release.tag_name
+}
+
 if ([string]::IsNullOrWhiteSpace($InstallDir)) {
     $InstallDir = Join-Path $env:LOCALAPPDATA 'sindook\bin'
 }
 
+if ($Repo -notmatch '^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$') {
+    throw "Sindook installer: invalid repository '$Repo'; expected OWNER/REPO."
+}
+
 if ([string]::IsNullOrWhiteSpace($Version)) {
-    $headers = @{ 'User-Agent' = 'sindook-installer' }
-    $release = Invoke-RestMethod -Headers $headers -Uri "https://api.github.com/repos/$Repo/releases/latest"
-    $tag = $release.tag_name
-    $assetVersion = $tag.TrimStart('v')
-    $downloadBase = "https://github.com/$Repo/releases/latest/download"
+    $tag = Get-SindookLatestTag -Repo $Repo
 } else {
     if ($Version.StartsWith('v')) { $tag = $Version } else { $tag = "v$Version" }
-    if ($tag -notmatch '^v[0-9]') {
-        throw "Sindook installer: invalid release version '$tag'."
-    }
-    $assetVersion = $tag.TrimStart('v')
-    $downloadBase = "https://github.com/$Repo/releases/download/$tag"
 }
+if ($tag -notmatch '^v[0-9]') {
+    throw "Sindook installer: invalid release version '$tag'."
+}
+$assetVersion = $tag -replace '^v', ''
+# Pinned to the resolved tag rather than the floating /latest/download alias so
+# a release published mid-install cannot mismatch the asset name built below.
+$downloadBase = "https://github.com/$Repo/releases/download/$tag"
 
 $architecture = if ($env:PROCESSOR_ARCHITEW6432) { $env:PROCESSOR_ARCHITEW6432 } else { $env:PROCESSOR_ARCHITECTURE }
 switch -Regex ($architecture) {
@@ -58,8 +126,8 @@ $expanded = Join-Path $tempDir 'expanded'
 try {
     New-Item -ItemType Directory -Path $tempDir -Force | Out-Null
     Write-Host "Downloading Sindook $tag for windows/$arch..."
-    Invoke-WebRequest -Uri "$downloadBase/$asset" -OutFile $archive
-    Invoke-WebRequest -Uri "$downloadBase/checksums.txt" -OutFile $checksums
+    Invoke-SindookRequest -Uri "$downloadBase/$asset" -OutFile $archive | Out-Null
+    Invoke-SindookRequest -Uri "$downloadBase/checksums.txt" -OutFile $checksums | Out-Null
 
     $checksumPattern = '^[A-Fa-f0-9]{64}\s+\*?' + [regex]::Escape($asset) + '$'
     $checksumLine = Get-Content -LiteralPath $checksums | Where-Object { $_ -match $checksumPattern } | Select-Object -First 1
@@ -80,7 +148,7 @@ try {
     if ($cosign) {
         Write-Host 'cosign found; verifying keyless signature (best-effort)...'
         try {
-            Invoke-WebRequest -Uri "$downloadBase/checksums.txt.sigstore.json" -OutFile $bundle
+            Invoke-SindookRequest -Uri "$downloadBase/checksums.txt.sigstore.json" -OutFile $bundle | Out-Null
             & $cosign.Source verify-blob $checksums --bundle $bundle `
                 --certificate-identity-regexp '^https://github.com/ruddro-roy/sindook/.github/workflows/release.yml@refs/tags/.+$' `
                 --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' | Out-Null
